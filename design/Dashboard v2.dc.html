@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body { margin:0; background:#111111; font-family:'Space Grotesk',sans-serif; }
+a { color:#f7931a; text-decoration:none; }
+a:hover { color:#ffa733; text-decoration:underline; }
+@keyframes ot-pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+@keyframes ot-spin { to { transform:rotate(360deg); } }
+@keyframes ot-shimmer { 0%{background-position:-200px 0;} 100%{background-position:200px 0;} }
+@keyframes ot-settle { 0%{transform:scale(1.12); opacity:0;} 100%{transform:scale(1); opacity:1;} }
+</style>
+</helmet>
+<section data-screen-label="Dashboard v2 — all screens" style="padding:48px; display:flex; flex-direction:column; gap:44px; align-items:flex-start;">
+  <div style="max-width:720px;">
+    <div style="font:700 13px 'JetBrains Mono'; letter-spacing:4px; color:#f7931a;">OPENTILL · V2</div>
+    <h1 style="margin:10px 0 8px; font:700 28px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">Merchant dashboard</h1>
+    <p style="margin:0; font-size:14px; line-height:1.6; color:#a1a1a1;">Ref-2 architecture: dark chrome, white inset working sheet, solid orange hero balance card. <a href="Checkout v2.dc.html">Checkout v2</a> · <a href="Tokens v2.dc.html">Tokens v2</a></p>
+  </div>
+
+  <!-- 1. KEY GATE -->
+  <div data-screen-label="1 API key gate">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">01 · API KEY GATE</div>
+    <div style="width:1200px; height:640px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; display:flex; align-items:center; justify-content:center;">
+      <div style="width:420px;">
+        <div style="font:700 44px/1 'Space Grotesk'; letter-spacing:-2px; color:#ffffff;">Open<span style="color:#f7931a;">Till</span></div>
+        <div style="margin-top:10px; font:400 14px 'Space Grotesk'; color:#a1a1a1;">Enter the API key from your server's <span style="font:400 12.5px 'JetBrains Mono'; color:#f5f5f5;">opentill.conf</span>.</div>
+        <input type="password" value="••••••••••••••••" style="margin-top:26px; width:100%; box-sizing:border-box; background:#141414; border:1px solid #333333; border-radius:10px; padding:14px 16px; font:400 15px 'JetBrains Mono'; color:#f5f5f5; letter-spacing:2px; outline:none;">
+        <button style="margin-top:12px; width:100%; background:#f7931a; border:none; border-radius:10px; padding:15px; font:700 14px 'Space Grotesk'; letter-spacing:.5px; color:#0a0a0a; cursor:pointer;" style-hover="background:#ffa733;">Unlock</button>
+        <div style="margin-top:18px; font:400 11px 'JetBrains Mono'; color:#4a4a4a;">Self-hosted · your key never leaves this browser</div>
+      </div>
+    </div>
+    <div style="margin-top:8px; font-size:12px; color:#6b6b6b;">Wordmark carries the screen — no card chrome, form floats on black.</div>
+  </div>
+
+  <!-- 2. OVERVIEW -->
+  <div data-screen-label="2 Overview">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">02 · OVERVIEW</div>
+    <div style="width:1200px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; overflow:hidden; display:flex;">
+      <div style="width:210px; flex-shrink:0; border-right:1px solid #1e1e1e; padding:26px 0; display:flex; flex-direction:column; min-height:880px;">
+        <div style="padding:0 24px; font:700 20px 'Space Grotesk'; letter-spacing:-.5px; color:#ffffff;">Open<span style="color:#f7931a;">Till</span></div>
+        <div style="margin-top:36px; display:flex; flex-direction:column; gap:4px; padding:0 14px;">
+          <div style="padding:10px 12px; border-radius:8px; background:#f7931a; font:700 13px 'Space Grotesk'; color:#0a0a0a;">Overview</div>
+          <div style="padding:10px 12px; border-radius:8px; font:500 13px 'Space Grotesk'; color:#a1a1a1;" style-hover="background:#141414; color:#f5f5f5;">Invoices</div>
+          <div style="padding:10px 12px; border-radius:8px; font:500 13px 'Space Grotesk'; color:#a1a1a1;" style-hover="background:#141414; color:#f5f5f5;">New charge</div>
+        </div>
+        <div style="margin-top:auto; padding:0 24px; font:400 11px 'JetBrains Mono'; color:#4a4a4a;">v0.4.2 · node OK</div>
+      </div>
+      <div style="flex:1; padding:30px 32px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font:700 26px 'Space Grotesk'; letter-spacing:-1px; color:#f5f5f5;">Overview</div>
+          <button style="background:#f7931a; border:none; border-radius:8px; padding:11px 20px; font:700 13px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;" style-hover="background:#ffa733;">+ New charge</button>
+        </div>
+        <!-- balance heroes -->
+        <div style="margin-top:24px; display:grid; grid-template-columns:1.2fr 1fr; gap:14px;">
+          <div style="background:#f7931a; border-radius:14px; padding:24px 26px; position:relative; overflow:hidden;">
+            <div style="font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:rgba(10,10,10,.65);">SPENDABLE NOW · OFF-CHAIN</div>
+            <div style="margin-top:14px; font:700 44px/1 'Space Grotesk'; letter-spacing:-2px; color:#0a0a0a;">1&#8201;146&#8201;300 <span style="font:700 18px 'Space Grotesk';">sats</span></div>
+            <div style="margin-top:8px; font:400 12px 'JetBrains Mono'; color:rgba(10,10,10,.6);">0.01146300 BTC · instant, yours to move any time</div>
+            <button style="margin-top:18px; background:#0a0a0a; border:none; border-radius:8px; padding:10px 20px; font:700 12.5px 'Space Grotesk'; color:#f7931a; cursor:pointer;">Withdraw</button>
+          </div>
+          <div style="background:#141414; border:1px solid #262626; border-radius:14px; padding:24px 26px;">
+            <div style="font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">ON-CHAIN · SETTLED</div>
+            <div style="margin-top:14px; font:700 44px/1 'Space Grotesk'; letter-spacing:-2px; color:#f5f5f5;">3&#8201;072&#8201;200 <span style="font:700 18px 'Space Grotesk'; color:#6b6b6b;">sats</span></div>
+            <div style="margin-top:8px; font:400 12px 'JetBrains Mono'; color:#6b6b6b;">plain Bitcoin · withdraw needs no one's permission</div>
+          </div>
+        </div>
+        <!-- stat row -->
+        <div style="margin-top:14px; display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+          <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:18px 20px;">
+            <div style="font:500 10.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">ALL-TIME CONFIRMED</div>
+            <div style="margin-top:10px; font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">4&#8201;218&#8201;500</div>
+            <div style="margin-top:3px; font:400 11px 'JetBrains Mono'; color:#4a4a4a;">sats · 0.042185 BTC</div>
+          </div>
+          <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:18px 20px;">
+            <div style="font:500 10.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">LAST 24H</div>
+            <div style="margin-top:10px; font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">312&#8201;000</div>
+            <div style="margin-top:3px; font:400 11px 'JetBrains Mono'; color:#4a4a4a;">sats · 14 invoices</div>
+          </div>
+          <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:18px 20px;">
+            <div style="font:500 10.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">PENDING</div>
+            <div style="margin-top:10px; font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">3</div>
+            <div style="margin-top:3px; font:400 11px 'JetBrains Mono'; color:#4a4a4a;">130&#8201;000 sats awaited</div>
+          </div>
+          <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:18px 20px;">
+            <div style="font:500 10.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">REFUNDED TOTAL</div>
+            <div style="margin-top:10px; font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">85&#8201;000</div>
+            <div style="margin-top:3px; font:400 11px 'JetBrains Mono'; color:#4a4a4a;">sats · 2 refunds</div>
+          </div>
+        </div>
+        <!-- white inset sheet: recent invoices -->
+        <div style="margin-top:20px; background:#ffffff; border-radius:14px; padding:22px 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:baseline;">
+            <div style="font:700 16px 'Space Grotesk'; letter-spacing:-.3px; color:#0a0a0a;">Recent invoices</div>
+            <a href="#" style="font:500 12px 'JetBrains Mono'; color:#b56207;">View all →</a>
+          </div>
+          <div style="margin-top:12px;">
+            <sc-for list="{{ recent }}" as="r" hint-placeholder-count="5">
+              <div style="display:grid; grid-template-columns:150px 1fr 150px 130px 90px; gap:12px; align-items:center; padding:11px 4px; border-bottom:1px solid #efefef; font:400 12.5px 'JetBrains Mono'; color:#0a0a0a;" style-hover="background:#fafafa;">
+                <span style="color:#8a8a8a;">{{ r.id }}</span>
+                <span style="font-family:'Space Grotesk'; font-weight:500; color:#333333; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.memo }}</span>
+                <span style="text-align:right; font-weight:500; font-variant-numeric:tabular-nums;">{{ r.amount }}</span>
+                <span><span style="display:inline-block; border-radius:99px; padding:4px 11px; font:700 10px 'JetBrains Mono'; letter-spacing:.5px; background:{{ r.solidBg }}; color:{{ r.solidFg }};">{{ r.status }}</span></span>
+                <span style="color:#b0b0b0; text-align:right;">{{ r.age }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:8px; font-size:12px; color:#6b6b6b; max-width:900px;">"Spendable now" is the solid orange hero (black text, own Withdraw button); on-chain is its quiet dark twin. Recent invoices sit on the white inset sheet with solid-fill pills.</div>
+  </div>
+
+  <!-- 3. INVOICES TABLE -->
+  <div data-screen-label="3 Invoices table">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">03 · INVOICES — WHITE SHEET IN DARK CHROME</div>
+    <div style="width:1200px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; overflow:hidden; display:flex;">
+      <div style="width:210px; flex-shrink:0; border-right:1px solid #1e1e1e; padding:26px 0; display:flex; flex-direction:column; min-height:820px;">
+        <div style="padding:0 24px; font:700 20px 'Space Grotesk'; letter-spacing:-.5px; color:#ffffff;">Open<span style="color:#f7931a;">Till</span></div>
+        <div style="margin-top:36px; display:flex; flex-direction:column; gap:4px; padding:0 14px;">
+          <div style="padding:10px 12px; border-radius:8px; font:500 13px 'Space Grotesk'; color:#a1a1a1;">Overview</div>
+          <div style="padding:10px 12px; border-radius:8px; background:#f7931a; font:700 13px 'Space Grotesk'; color:#0a0a0a;">Invoices</div>
+          <div style="padding:10px 12px; border-radius:8px; font:500 13px 'Space Grotesk'; color:#a1a1a1;">New charge</div>
+        </div>
+      </div>
+      <div style="flex:1; padding:30px 32px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font:700 26px 'Space Grotesk'; letter-spacing:-1px; color:#f5f5f5;">Invoices</div>
+          <input placeholder="Search id or memo…" style="width:250px; background:#141414; border:1px solid #262626; border-radius:8px; padding:10px 14px; font:400 13px 'JetBrains Mono'; color:#f5f5f5; outline:none;">
+        </div>
+        <div style="margin-top:16px; display:flex; gap:8px;">
+          <div style="padding:8px 16px; border-radius:99px; background:#f7931a; font:700 12px 'Space Grotesk'; color:#0a0a0a;">All · 42</div>
+          <div style="padding:8px 16px; border-radius:99px; border:1px solid #333333; font:500 12px 'Space Grotesk'; color:#a1a1a1; cursor:pointer;" style-hover="border-color:#6b6b6b; color:#f5f5f5;">Pending · 3</div>
+          <div style="padding:8px 16px; border-radius:99px; border:1px solid #333333; font:500 12px 'Space Grotesk'; color:#a1a1a1; cursor:pointer;" style-hover="border-color:#6b6b6b; color:#f5f5f5;">Confirmed · 31</div>
+          <div style="padding:8px 16px; border-radius:99px; border:1px solid #333333; font:500 12px 'Space Grotesk'; color:#a1a1a1; cursor:pointer;" style-hover="border-color:#6b6b6b; color:#f5f5f5;">Expired · 5</div>
+          <div style="padding:8px 16px; border-radius:99px; border:1px solid #333333; font:500 12px 'Space Grotesk'; color:#a1a1a1; cursor:pointer;">More ▾</div>
+        </div>
+        <div style="margin-top:16px; background:#ffffff; border-radius:14px; padding:8px 24px 14px; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:140px 1fr 110px 110px 140px 90px 90px; gap:12px; padding:12px 4px; border-bottom:1.5px solid #0a0a0a; font:700 10px 'JetBrains Mono'; letter-spacing:1.5px; color:#8a8a8a;">
+            <span>ID</span><span>MEMO / ORDER</span><span style="text-align:right;">AMOUNT</span><span style="text-align:right;">PAID</span><span>STATUS</span><span style="text-align:right;">CREATED</span><span style="text-align:right;">EXPIRES</span>
+          </div>
+          <sc-for list="{{ invoices }}" as="v" hint-placeholder-count="7">
+            <div style="display:grid; grid-template-columns:140px 1fr 110px 110px 140px 90px 90px; gap:12px; align-items:center; padding:12px 4px; border-bottom:1px solid #efefef; font:400 12.5px 'JetBrains Mono'; color:#0a0a0a; cursor:pointer;" style-hover="background:#fafafa;">
+              <span style="display:flex; align-items:center; gap:6px; color:#8a8a8a;">{{ v.id }}<span style="opacity:.45; font-size:11px;">⧉</span></span>
+              <span style="font-family:'Space Grotesk'; font-weight:500; color:#333333; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ v.memo }}</span>
+              <span style="text-align:right; font-weight:500; font-variant-numeric:tabular-nums;">{{ v.amount }}</span>
+              <span style="text-align:right; font-variant-numeric:tabular-nums; color:{{ v.paidColor }};">{{ v.paid }}</span>
+              <span><span style="display:inline-block; border-radius:99px; padding:4px 11px; font:700 10px 'JetBrains Mono'; letter-spacing:.5px; background:{{ v.solidBg }}; color:{{ v.solidFg }};">{{ v.status }}</span></span>
+              <span style="color:#b0b0b0; text-align:right;">{{ v.created }}</span>
+              <span style="color:#b0b0b0; text-align:right;">{{ v.expires }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 4px 4px; font:400 12px 'JetBrains Mono'; color:#8a8a8a;">
+            <span>Showing 1–10 of 42</span>
+            <div style="display:flex; gap:6px;">
+              <button style="background:transparent; border:1px solid #e0e0e0; border-radius:6px; padding:6px 12px; color:#c0c0c0; font:700 11px 'JetBrains Mono'; cursor:default;">‹ PREV</button>
+              <button style="background:#0a0a0a; border:1px solid #0a0a0a; border-radius:6px; padding:6px 12px; color:#ffffff; font:700 11px 'JetBrains Mono'; cursor:pointer;">NEXT ›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:8px; font-size:12px; color:#6b6b6b; max-width:900px;">Filter chips on dark (active = filled orange); the table lives on the white sheet with solid-fill pills and a heavy black header rule (ref-1 precision).</div>
+  </div>
+
+  <!-- 4. SLIDE-OVER -->
+  <div data-screen-label="4 Invoice detail slide-over">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">04 · INVOICE DETAIL — SLIDE-OVER</div>
+    <div style="width:1200px; height:880px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; overflow:hidden; position:relative;">
+      <div style="position:absolute; inset:0; padding:30px 32px; opacity:.4;">
+        <div style="font:700 26px 'Space Grotesk'; letter-spacing:-1px; color:#f5f5f5;">Invoices</div>
+        <div style="margin-top:18px; height:640px; background:#ffffff; border-radius:14px;"></div>
+      </div>
+      <div style="position:absolute; inset:0; background:rgba(0,0,0,.55);"></div>
+      <div style="position:absolute; top:0; right:0; bottom:0; width:540px; background:#141414; border-left:1px solid #262626; box-shadow:-32px 0 80px rgba(0,0,0,.6); padding:28px 30px; overflow:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">Invoice</div>
+            <span style="display:inline-block; border-radius:99px; padding:4px 12px; font:700 10px 'JetBrains Mono'; letter-spacing:.5px; background:rgba(63,158,106,.18); color:#57b380;">CONFIRMED</span>
+          </div>
+          <div style="font:400 20px 'Space Grotesk'; color:#6b6b6b; cursor:pointer;" style-hover="color:#f5f5f5;">×</div>
+        </div>
+        <div style="margin-top:8px; display:flex; align-items:center; gap:8px; font:400 12px 'JetBrains Mono'; color:#6b6b6b;">inv_9f3k2m7xq0a2c7 <span style="opacity:.6; cursor:pointer;">⧉</span> · <a href="Checkout v2.dc.html" style="font:500 12px 'JetBrains Mono';">Open checkout ↗</a></div>
+        <div style="margin-top:20px; background:#ffffff; border-radius:12px; padding:20px 22px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px 20px;">
+            <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#8a8a8a;">AMOUNT</div><div style="margin-top:4px; font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#0a0a0a;">50&#8201;000 <span style="font:700 12px 'Space Grotesk'; color:#8a8a8a;">sats</span></div></div>
+            <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#8a8a8a;">PAID</div><div style="margin-top:4px; font:700 22px 'Space Grotesk'; letter-spacing:-.5px; color:#2d7a50;">50&#8201;000 <span style="font:700 12px 'Space Grotesk'; color:#8a8a8a;">sats</span></div></div>
+            <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#8a8a8a;">MEMO</div><div style="margin-top:4px; font:500 13px 'Space Grotesk'; color:#333333;">Order #1042 — 2 flat whites</div></div>
+            <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#8a8a8a;">CREATED / EXPIRES</div><div style="margin-top:4px; font:400 12px 'JetBrains Mono'; color:#333333;">14:22:08 → 14:37:08</div></div>
+          </div>
+        </div>
+        <div style="margin-top:24px; font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">PAYMENTS</div>
+        <div style="margin-top:8px; border:1px solid #262626; border-radius:10px; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:120px 1fr 120px 80px; gap:10px; padding:10px 14px; background:#1a1a1a; font:700 9.5px 'JetBrains Mono'; letter-spacing:1px; color:#6b6b6b;"><span>ID</span><span style="text-align:right;">AMOUNT</span><span>SEEN → COMMITTED</span><span></span></div>
+          <div style="display:grid; grid-template-columns:120px 1fr 120px 80px; gap:10px; align-items:center; padding:11px 14px; border-top:1px solid #1e1e1e; font:400 12px 'JetBrains Mono'; color:#f5f5f5;">
+            <span style="color:#6b6b6b;">pay_x21f…09</span><span style="text-align:right; font-variant-numeric:tabular-nums;">50&#8201;000</span><span style="color:#4a4a4a;">14:32:07 → :08</span><span></span>
+          </div>
+          <div style="display:grid; grid-template-columns:120px 1fr 120px 80px; gap:10px; align-items:center; padding:11px 14px; border-top:1px solid #1e1e1e; font:400 12px 'JetBrains Mono'; color:#f5f5f5;">
+            <span style="color:#6b6b6b;">pay_b77e…3c</span><span style="text-align:right; font-variant-numeric:tabular-nums;">10&#8201;000</span><span style="color:#4a4a4a;">14:39:12 → :13</span><span style="justify-self:end;"><span style="background:#d9a441; color:#0a0a0a; border-radius:4px; padding:2px 7px; font:700 9px 'JetBrains Mono'; letter-spacing:1px;">LATE</span></span>
+          </div>
+        </div>
+        <div style="margin-top:24px; font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">WEBHOOK DELIVERIES</div>
+        <div style="margin-top:8px; border:1px solid #262626; border-radius:10px; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:1fr 90px 80px 80px; gap:10px; padding:10px 14px; background:#1a1a1a; font:700 9.5px 'JetBrains Mono'; letter-spacing:1px; color:#6b6b6b;"><span>EVENT</span><span>STATUS</span><span style="text-align:right;">ATTEMPTS</span><span></span></div>
+          <div style="display:grid; grid-template-columns:1fr 90px 80px 80px; gap:10px; align-items:center; padding:11px 14px; border-top:1px solid #1e1e1e; font:400 12px 'JetBrains Mono'; color:#f5f5f5;">
+            <span>invoice.confirmed</span><span style="color:#57b380;">200 OK</span><span style="text-align:right;">1</span><span></span>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 90px 80px 80px; gap:10px; align-items:center; padding:11px 14px; border-top:1px solid #1e1e1e; font:400 12px 'JetBrains Mono'; color:#f5f5f5;">
+            <span>invoice.paid</span><span style="color:#c56a62;">FAILED</span><span style="text-align:right;">5</span><span style="justify-self:end;"><button style="background:#f5f5f5; border:none; border-radius:6px; padding:5px 11px; font:700 10px 'JetBrains Mono'; letter-spacing:1px; color:#0a0a0a; cursor:pointer;">RETRY</button></span>
+          </div>
+        </div>
+        <div style="margin-top:24px; border-top:1px solid #262626; padding-top:20px;">
+          <div style="font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">REFUND</div>
+          <button style="margin-top:12px; background:transparent; border:1px solid #333333; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#f5f5f5; cursor:pointer;" style-hover="border-color:#6b6b6b;">Refund 50&#8201;000 sats…</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:8px; font-size:12px; color:#6b6b6b; max-width:900px;">540px dark panel, 220ms slide, table dims behind. The white data card at top = the sheet inside the panel.</div>
+  </div>
+
+  <!-- 4b. REFUND STATES -->
+  <div data-screen-label="4b Refund flow states">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">04B · REFUND FLOW — INLINE STATES</div>
+    <div style="display:flex; flex-wrap:wrap; gap:20px;">
+      <div style="width:380px; background:#141414; border:1px solid #262626; border-radius:12px; padding:20px;">
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a;">STEP 1 · CONFIRM</div>
+        <div style="margin-top:12px; border:1px solid #333333; border-radius:10px; padding:18px;">
+          <div style="font:700 15px 'Space Grotesk'; color:#f5f5f5;">Refund this invoice</div>
+          <div style="margin-top:14px; font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">AMOUNT TO RETURN</div>
+          <input value="50 000" style="margin-top:6px; width:100%; box-sizing:border-box; background:#0a0a0a; border:1px solid #333333; border-radius:8px; padding:11px 12px; font:500 16px 'JetBrains Mono'; color:#f5f5f5; text-align:right; outline:none;">
+          <div style="margin-top:12px; font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">DESTINATION ADDRESS</div>
+          <input placeholder="tachi1q… or bc1q…" style="margin-top:6px; width:100%; box-sizing:border-box; background:#0a0a0a; border:1px solid #333333; border-radius:8px; padding:11px 12px; font:400 12px 'JetBrains Mono'; color:#f5f5f5; outline:none;">
+          <div style="margin-top:16px; display:flex; gap:8px;">
+            <button style="flex:1; background:#f7931a; border:none; border-radius:8px; padding:11px; font:700 13px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;">Send refund</button>
+            <button style="background:transparent; border:1px solid #333333; border-radius:8px; padding:11px 16px; font:500 13px 'Space Grotesk'; color:#a1a1a1; cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div style="width:380px; background:#141414; border:1px solid #262626; border-radius:12px; padding:20px;">
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a;">STEP 2 · IN PROGRESS</div>
+        <div style="margin-top:12px; border:1px solid #262626; border-radius:10px; padding:24px 18px; display:flex; align-items:center; gap:14px;">
+          <div style="width:18px; height:18px; border:2.5px solid #262626; border-top-color:#f7931a; border-radius:50%; animation:ot-spin .7s linear infinite;"></div>
+          <div><div style="font:500 14px 'Space Grotesk'; color:#f5f5f5;">Sending 50&#8201;000 sats…</div><div style="font:400 11px 'JetBrains Mono'; color:#6b6b6b; margin-top:3px;">to tachi1q4kd…88wz</div></div>
+        </div>
+      </div>
+      <div style="width:380px; background:#141414; border:1px solid #262626; border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:12px;">
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a;">STEP 3 · RESULT + DISABLED</div>
+        <div style="border:1px solid #1e5c38; background:#12241a; border-radius:10px; padding:14px 16px;">
+          <div style="font:700 14px 'Space Grotesk'; color:#57b380;">Refund sent</div>
+          <div style="font:400 11px 'JetBrains Mono'; color:#6b6b6b; margin-top:4px;">50&#8201;000 sats · 2026-07-22 09:15:41 · pay_r3fnd…7a</div>
+        </div>
+        <div style="border:1px solid #4a2320; background:#211110; border-radius:10px; padding:14px 16px;">
+          <div style="font:700 14px 'Space Grotesk'; color:#c56a62;">Refund failed</div>
+          <div style="font:400 12px 'Space Grotesk'; color:#a1a1a1; margin-top:4px;">Destination rejected the transfer. Nothing left your balance.</div>
+          <button style="margin-top:10px; background:#f5f5f5; border:none; border-radius:6px; padding:7px 14px; font:700 11px 'JetBrains Mono'; letter-spacing:1px; color:#0a0a0a; cursor:pointer;">TRY AGAIN</button>
+        </div>
+        <div style="border-top:1px solid #262626; padding-top:12px;">
+          <button disabled style="background:transparent; border:1px solid #262626; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#4a4a4a; cursor:not-allowed;">Refund unavailable</button>
+          <div style="margin-top:6px; font:400 12px 'Space Grotesk'; color:#6b6b6b;">Nothing was paid on this invoice.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. POS -->
+  <div data-screen-label="5 POS new charge">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">05 · NEW CHARGE / POS — TABLET + PHONE</div>
+    <div style="display:flex; flex-wrap:wrap; gap:24px; align-items:flex-start;">
+      <div>
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a; margin-bottom:8px;">STEP 1 · AMOUNT — TABLET</div>
+        <div style="width:680px; height:520px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; box-sizing:border-box;">
+          <div style="width:440px; text-align:center;">
+            <div style="font:700 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b;">NEW CHARGE</div>
+            <div style="margin-top:20px; display:flex; align-items:baseline; justify-content:center; gap:12px; border-bottom:2px solid #333333; padding-bottom:12px;">
+              <span style="font:700 76px/1 'Space Grotesk'; letter-spacing:-3px; color:#ffffff;">50&#8201;000</span>
+              <span style="font:700 22px 'Space Grotesk'; color:#f7931a;">sats</span>
+            </div>
+            <div style="margin-top:10px; font:400 14px 'JetBrains Mono'; color:#4a4a4a;">≈ 0.00050000 BTC</div>
+            <input placeholder="Memo (optional)" style="margin-top:22px; width:100%; box-sizing:border-box; background:#141414; border:1px solid #262626; border-radius:8px; padding:13px 14px; font:400 14px 'Space Grotesk'; color:#f5f5f5; text-align:center; outline:none;">
+            <button style="margin-top:16px; width:100%; background:#f7931a; border:none; border-radius:10px; padding:18px; font:700 18px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;" style-hover="background:#ffa733;">Create charge</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a; margin-bottom:8px;">STEP 2 · SHOW CUSTOMER — LEGIBLE AT 1M</div>
+        <div style="width:680px; height:520px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; display:flex; align-items:center; justify-content:center; gap:52px; padding:40px; box-sizing:border-box;">
+          <div style="background:#ffffff; border:3px solid #f7931a; border-radius:16px; padding:16px; flex-shrink:0;">
+            <div style="width:296px; height:296px;">{{ qr }}</div>
+          </div>
+          <div>
+            <div style="font:700 64px/1 'Space Grotesk'; letter-spacing:-2.5px; color:#ffffff;">50&#8201;000</div>
+            <div style="margin-top:6px; font:700 24px 'Space Grotesk'; color:#f7931a;">sats</div>
+            <div style="margin-top:28px; display:flex; align-items:center; gap:10px; font:500 14px 'JetBrains Mono'; letter-spacing:1px; color:#a1a1a1;"><span style="width:10px; height:10px; border-radius:50%; background:#f7931a; animation:ot-pulse 1.4s ease-in-out infinite;"></span>WAITING · 09:42</div>
+            <button style="margin-top:32px; background:transparent; border:1px solid #333333; border-radius:8px; padding:10px 18px; font:500 13px 'Space Grotesk'; color:#a1a1a1; cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a; margin-bottom:8px;">CONFIRMED · MARKET-STALL GLANCE TEST</div>
+        <div style="width:680px; height:520px; background:#f7931a; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          <div style="animation:ot-settle .22s cubic-bezier(.2,.8,.3,1) both; text-align:center;">
+            <div style="font:700 120px/0.9 'Space Grotesk'; letter-spacing:-5px; color:#0a0a0a;">Paid</div>
+            <div style="margin-top:20px; font:700 44px/1 'Space Grotesk'; letter-spacing:-1.5px; color:#0a0a0a;">50&#8201;000 <span style="font:700 20px 'Space Grotesk'; color:rgba(10,10,10,.55);">sats</span></div>
+            <div style="margin-top:8px; font:500 16px 'Space Grotesk'; color:rgba(10,10,10,.65);">Order #1043</div>
+            <button style="margin-top:34px; background:#0a0a0a; border:none; border-radius:10px; padding:15px 36px; font:700 15px 'Space Grotesk'; color:#f7931a; cursor:pointer;">New charge</button>
+          </div>
+        </div>
+        <div style="margin-top:8px; font-size:12px; color:#6b6b6b; max-width:680px;">Decision: full ORANGE flood, black type — at 3m nothing else in the room is this color, and it's unambiguously the brand saying yes. Hard cut + 220ms settle; auto-reset after 8s.</div>
+      </div>
+      <div style="display:flex; gap:20px; align-items:flex-start;">
+        <div>
+          <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a; margin-bottom:8px;">STEP 1 · PHONE</div>
+          <div style="width:340px; height:600px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; display:flex; flex-direction:column; justify-content:center; padding:28px; box-sizing:border-box;">
+            <div style="font:700 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; text-align:center;">NEW CHARGE</div>
+            <div style="margin-top:20px; display:flex; align-items:baseline; justify-content:center; gap:8px; border-bottom:2px solid #333333; padding-bottom:12px;">
+              <span style="font:700 54px/1 'Space Grotesk'; letter-spacing:-2px; color:#ffffff;">50&#8201;000</span>
+              <span style="font:700 17px 'Space Grotesk'; color:#f7931a;">sats</span>
+            </div>
+            <div style="margin-top:8px; font:400 13px 'JetBrains Mono'; color:#4a4a4a; text-align:center;">≈ 0.00050000 BTC</div>
+            <input placeholder="Memo (optional)" style="margin-top:20px; width:100%; box-sizing:border-box; background:#141414; border:1px solid #262626; border-radius:8px; padding:12px; font:400 14px 'Space Grotesk'; color:#f5f5f5; text-align:center; outline:none;">
+            <button style="margin-top:14px; width:100%; background:#f7931a; border:none; border-radius:10px; padding:16px; font:700 16px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;">Create charge</button>
+          </div>
+        </div>
+        <div>
+          <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a; margin-bottom:8px;">STEP 2 · PHONE</div>
+          <div style="width:340px; height:600px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:28px; box-sizing:border-box;">
+            <div style="font:700 40px 'Space Grotesk'; letter-spacing:-1.5px; color:#ffffff;">50&#8201;000 <span style="font:700 16px 'Space Grotesk'; color:#f7931a;">sats</span></div>
+            <div style="background:#ffffff; border:3px solid #f7931a; border-radius:14px; padding:12px;">
+              <div style="width:220px; height:220px;">{{ qr }}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font:500 13px 'JetBrains Mono'; letter-spacing:1px; color:#a1a1a1;"><span style="width:8px; height:8px; border-radius:50%; background:#f7931a; animation:ot-pulse 1.4s ease-in-out infinite;"></span>WAITING · 09:42</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. EMPTY -->
+  <div data-screen-label="6 Empty states">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">06 · EMPTY STATES</div>
+    <div style="display:flex; flex-wrap:wrap; gap:20px;">
+      <div style="width:560px; background:#ffffff; border-radius:14px; padding:60px 32px; text-align:center;">
+        <div style="font:700 40px/1 'Space Grotesk'; letter-spacing:-1.5px; color:#e0e0e0;">Nothing yet</div>
+        <div style="margin-top:10px; font:400 14px 'Space Grotesk'; color:#8a8a8a;">Create your first charge and it will land here.</div>
+        <button style="margin-top:20px; background:#f7931a; border:none; border-radius:8px; padding:11px 22px; font:700 13px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;">+ New charge</button>
+      </div>
+      <div style="width:560px; display:flex; flex-direction:column; gap:20px;">
+        <div style="background:#141414; border:1px solid #262626; border-radius:14px; padding:22px 26px;">
+          <div style="font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">SPENDABLE NOW · OFF-CHAIN</div>
+          <div style="margin-top:12px; font:700 40px/1 'Space Grotesk'; letter-spacing:-1.5px; color:#333333;">0 <span style="font:700 16px 'Space Grotesk';">sats</span></div>
+          <div style="margin-top:8px; font:400 12.5px 'Space Grotesk'; color:#6b6b6b;">The till is empty — your first confirmed invoice fills it. The card turns orange when there's money in it.</div>
+        </div>
+        <div style="background:#141414; border:1px solid #262626; border-radius:14px; padding:22px 26px;">
+          <div style="font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">WEBHOOK DELIVERIES</div>
+          <div style="margin-top:10px; font:400 13px 'Space Grotesk'; color:#6b6b6b;">No deliveries for this invoice. Configure a webhook URL in <span style="font:400 12px 'JetBrains Mono'; color:#a1a1a1;">opentill.conf</span> to get notified.</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:8px; font-size:12px; color:#6b6b6b;">Zero-balance card stays dark — orange is earned by having money.</div>
+  </div>
+
+  <!-- 7. ERRORS / LOADING / 768 -->
+  <div data-screen-label="7 Errors and loading">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:10px;">07 · ERRORS, LOADING, 768px</div>
+    <div style="display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;">
+      <div style="width:400px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; padding:44px 36px;">
+        <div style="font:700 30px/1 'Space Grotesk'; letter-spacing:-1px; color:#ffffff;">Open<span style="color:#f7931a;">Till</span></div>
+        <div style="margin-top:22px; background:#211110; border:1px solid #4a2320; border-radius:8px; padding:11px 14px; font:400 13px 'Space Grotesk'; color:#c56a62;">Key rejected by the server. Enter it again.</div>
+        <input type="password" style="margin-top:14px; width:100%; box-sizing:border-box; background:#141414; border:1px solid #6b3530; border-radius:10px; padding:13px 14px; font:400 14px 'JetBrains Mono'; color:#f5f5f5; outline:none;">
+        <button style="margin-top:12px; width:100%; background:#f7931a; border:none; border-radius:10px; padding:14px; font:700 14px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;">Unlock</button>
+      </div>
+      <div style="width:420px; display:flex; flex-direction:column; gap:16px;">
+        <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:16px;">
+          <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a;">API ERROR — INLINE PATTERN</div>
+          <div style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:#211110; border:1px solid #4a2320; border-radius:8px; padding:11px 14px;">
+            <div style="font:400 13px 'Space Grotesk'; color:#c56a62;">Couldn't reach the server. <span style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">GET /invoices · timeout</span></div>
+            <button style="flex-shrink:0; background:#f5f5f5; border:none; border-radius:6px; padding:6px 12px; font:700 10px 'JetBrains Mono'; letter-spacing:1px; color:#0a0a0a; cursor:pointer;">RETRY</button>
+          </div>
+        </div>
+        <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:16px;">
+          <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a;">LOADING — SKELETON SYSTEM</div>
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+            <div style="height:14px; width:40%; border-radius:4px; background:linear-gradient(90deg,#1e1e1e 25%,#292929 50%,#1e1e1e 75%); background-size:400px 100%; animation:ot-shimmer 1.2s linear infinite;"></div>
+            <div style="height:14px; width:85%; border-radius:4px; background:linear-gradient(90deg,#1e1e1e 25%,#292929 50%,#1e1e1e 75%); background-size:400px 100%; animation:ot-shimmer 1.2s linear infinite;"></div>
+            <div style="height:14px; width:70%; border-radius:4px; background:linear-gradient(90deg,#1e1e1e 25%,#292929 50%,#1e1e1e 75%); background-size:400px 100%; animation:ot-shimmer 1.2s linear infinite;"></div>
+          </div>
+          <div style="margin-top:10px; font:400 12px 'Space Grotesk'; color:#6b6b6b;">Rows mirror final geometry (white-sheet skeletons use #f0f0f0/#f7f7f7). Spinner only inside buttons.</div>
+        </div>
+      </div>
+      <div>
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a; margin-bottom:8px;">OVERVIEW AT 768px — TOP BAR, HEROES STACK, STATS 2×2</div>
+        <div style="width:768px; background:#0a0a0a; border:1px solid #262626; border-radius:16px; overflow:hidden;">
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid #1e1e1e;">
+            <div style="font:700 17px 'Space Grotesk'; letter-spacing:-.5px; color:#ffffff;">Open<span style="color:#f7931a;">Till</span></div>
+            <div style="display:flex; gap:8px;">
+              <span style="padding:7px 14px; border-radius:99px; background:#f7931a; font:700 12px 'Space Grotesk'; color:#0a0a0a;">Overview</span>
+              <span style="padding:7px 14px; border-radius:99px; font:500 12px 'Space Grotesk'; color:#a1a1a1;">Invoices</span>
+              <span style="padding:7px 14px; border-radius:99px; font:500 12px 'Space Grotesk'; color:#a1a1a1;">New charge</span>
+            </div>
+          </div>
+          <div style="padding:20px; display:flex; flex-direction:column; gap:12px;">
+            <div style="background:#f7931a; border-radius:12px; padding:20px 22px;">
+              <div style="font:700 10px 'JetBrains Mono'; letter-spacing:1.5px; color:rgba(10,10,10,.65);">SPENDABLE NOW · OFF-CHAIN</div>
+              <div style="margin-top:10px; font:700 34px/1 'Space Grotesk'; letter-spacing:-1.5px; color:#0a0a0a;">1&#8201;146&#8201;300 <span style="font:700 15px 'Space Grotesk';">sats</span></div>
+            </div>
+            <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:20px 22px;">
+              <div style="font:700 10px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">ON-CHAIN · SETTLED</div>
+              <div style="margin-top:10px; font:700 34px/1 'Space Grotesk'; letter-spacing:-1.5px; color:#f5f5f5;">3&#8201;072&#8201;200 <span style="font:700 15px 'Space Grotesk'; color:#6b6b6b;">sats</span></div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:16px 18px;"><div style="font:500 10px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">ALL-TIME CONFIRMED</div><div style="margin-top:8px; font:700 20px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">4&#8201;218&#8201;500</div></div>
+              <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:16px 18px;"><div style="font:500 10px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">LAST 24H</div><div style="margin-top:8px; font:700 20px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">312&#8201;000</div></div>
+              <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:16px 18px;"><div style="font:500 10px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">PENDING</div><div style="margin-top:8px; font:700 20px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">3</div></div>
+              <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:16px 18px;"><div style="font:500 10px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">REFUNDED TOTAL</div><div style="margin-top:8px; font:700 20px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">85&#8201;000</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    if (!this._qr) {
+      const N = 25; let s = 1337;
+      const rnd = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+      const inFinder = (x, y) => (x < 8 && y < 8) || (x > 16 && y < 8) || (x < 8 && y > 16);
+      let d = '';
+      const cell = (x, y) => { d += `M${x} ${y}h1v1h-1z`; };
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { if (!inFinder(x, y) && rnd() > 0.52) cell(x, y); }
+      const finder = (fx, fy) => {
+        for (let i = 0; i < 7; i++) { cell(fx + i, fy); cell(fx + i, fy + 6); }
+        for (let i = 1; i < 6; i++) { cell(fx, fy + i); cell(fx + 6, fy + i); }
+        for (let y = 2; y < 5; y++) for (let x = 2; x < 5; x++) cell(fx + x, fy + y);
+      };
+      finder(0, 0); finder(18, 0); finder(0, 18);
+      this._qr = React.createElement('svg', { viewBox: '0 0 25 25', style: { width: '100%', height: '100%', display: 'block' }, 'shape-rendering': 'crispEdges' }, React.createElement('path', { d, fill: '#0a0a0a' }));
+    }
+    // Solid-fill pill variants for white sheet (ref-2 style)
+    const S = {
+      pending:        { bg: '#f0e3c8', fg: '#7a5a14' },
+      paid:           { bg: '#3f9e6a', fg: '#ffffff' },
+      confirmed:      { bg: '#0a0a0a', fg: '#7fd6a4' },
+      underpaid:      { bg: '#c99a3d', fg: '#0a0a0a' },
+      expired:        { bg: '#e8e8e8', fg: '#6b6b6b' },
+      refund_pending: { bg: '#f3ddda', fg: '#8a3a32' },
+      refunded:       { bg: '#4a4a4a', fg: '#e0e0e0' },
+    };
+    const row = (id, memo, amount, paid, status, created, expires, paidColor) => ({
+      id, memo, amount, paid, status: status.toUpperCase(), created, expires,
+      solidBg: S[status].bg, solidFg: S[status].fg, paidColor: paidColor || '#0a0a0a', age: created,
+    });
+    const invoices = [
+      row('inv_9f3k…a2c7', 'Order #1042 — 2 flat whites', '50\u2009000', '50\u2009000', 'confirmed', '14:32', '—', '#2d7a50'),
+      row('inv_2b8n…f1e9', 'Order #1041 — beans 1kg', '120\u2009000', '0', 'pending', '14:28', '14:43', '#b0b0b0'),
+      row('inv_7c1m…d803', 'Sticker pack', '15\u2009000', '15\u2009000', 'paid', '14:11', '—', '#2d7a50'),
+      row('inv_5k2p…88aa', 'Order #1039', '80\u2009000', '30\u2009000', 'underpaid', '13:47', 'lapsed', '#9a7420'),
+      row('inv_1a9x…c44b', 'Consulting deposit', '500\u2009000', '500\u2009000', 'confirmed', '12:02', '—', '#2d7a50'),
+      row('inv_8d4q…17f2', 'Order #1036 — espresso ×4', '32\u2009000', '0', 'expired', '11:30', 'lapsed', '#b0b0b0'),
+      row('inv_3e7r…9b21', 'Order #1035', '45\u2009000', '45\u2009000', 'refund_pending', '10:58', '—', '#0a0a0a'),
+      row('inv_6f0s…40cd', 'Gift card', '85\u2009000', '85\u2009000', 'refunded', '09:15', '—', '#6b6b6b'),
+      row('inv_4g5t…e6a8', 'Order #1032 — 1 pour-over', '18\u2009000', '18\u2009000', 'confirmed', '08:44', '—', '#2d7a50'),
+      row('inv_0h3u…52b7', 'Market stall — misc', '22\u2009000', '22\u2009000', 'confirmed', '08:12', '—', '#2d7a50'),
+    ];
+    return { qr: this._qr, invoices, recent: invoices.slice(0, 5) };
+  }
+}
+</script>
+</body>
+</html>

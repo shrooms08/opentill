@@ -1,0 +1,547 @@
+/* Checkout v2 — black card on black page. See design/Checkout v2.dc.html. */
+
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ot-s-5) var(--ot-s-4);
+  gap: var(--ot-s-4);
+  /* The page never scrolls sideways, whatever a card tries to render. */
+  overflow-x: hidden;
+}
+
+.ck-root {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ot-s-4);
+}
+
+/* Card separated from page by hairline + shadow, not color. */
+.ck-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--ot-bg);
+  border: 1px solid var(--ot-hairline);
+  border-radius: var(--ot-r-lg);
+  box-shadow: var(--ot-card-shadow);
+  padding: 24px 22px 20px;
+  animation: ot-fade 0.15s ease-out;
+  /* Belt-and-braces: no child (QR, long address, big hero) may escape the card
+     or push the page into horizontal scroll at any viewport >= 320px. The
+     card's own box-shadow (incl. the confirmed glow) is unaffected. */
+  overflow: hidden;
+}
+
+.ck-card.is-confirmed {
+  border-color: var(--ot-green-well-border);
+  box-shadow: var(--ot-confirm-glow);
+}
+
+.ck-card.is-expired {
+  border-color: var(--ot-hairline-2);
+  box-shadow: none;
+}
+
+/* ---- header row ------------------------------------------------------------- */
+
+.ck-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ck-merchant {
+  font: 500 13px var(--ot-font-display);
+  color: var(--ot-text);
+}
+
+.is-expired .ck-merchant {
+  color: var(--ot-text-3);
+}
+
+.ck-state-label {
+  font: 500 10.5px var(--ot-font-mono);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.ck-state-label.is-green {
+  color: var(--ot-green-dark-surface);
+}
+
+.ck-state-label.is-amber {
+  color: var(--ot-amber);
+}
+
+.ck-state-label.is-gray {
+  color: var(--ot-text-3);
+}
+
+.ck-state-label.is-neutral {
+  color: var(--ot-text-2);
+}
+
+/* ---- hero amount ------------------------------------------------------------ */
+
+.ck-amount {
+  margin-top: 26px;
+}
+
+.ck-hero {
+  font: 700 58px/0.95 var(--ot-font-display);
+  letter-spacing: -2.5px;
+  color: var(--ot-text-hero);
+}
+
+.ck-unit-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ck-unit {
+  font: 700 16px var(--ot-font-display);
+  color: var(--ot-accent);
+}
+
+.ck-btc {
+  font: 400 12px var(--ot-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ot-text-3);
+}
+
+.ck-memo {
+  margin-top: 10px;
+  font: 400 13px var(--ot-font-display);
+  color: var(--ot-text-2);
+}
+
+.is-expired .ck-memo {
+  color: var(--ot-text-3);
+}
+
+/* ---- partial (green well) ---------------------------------------------------- */
+
+.ck-partial {
+  margin-top: 18px;
+}
+
+.ck-partial-row {
+  display: flex;
+  justify-content: space-between;
+  font: 500 12px var(--ot-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ot-green-dark-surface);
+}
+
+.ck-partial-track {
+  margin-top: 8px;
+  height: 5px;
+  background: var(--ot-green-well-track);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ck-partial-fill {
+  height: 100%;
+  background: var(--ot-green);
+  border-radius: 3px;
+}
+
+.ck-partial-hint {
+  margin-top: 8px;
+  font: 400 12.5px var(--ot-font-display);
+  color: var(--ot-text-2);
+}
+
+.ck-partial-hint .strong {
+  font: 500 12px var(--ot-font-mono);
+  color: var(--ot-text);
+}
+
+/* ---- QR / spinner well ------------------------------------------------------- */
+
+.ck-qr-wrap {
+  margin-top: 22px;
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ck-partial ~ .ck-qr-wrap {
+  margin-top: 16px;
+}
+
+/* Finalizing: spinner well replaces the QR block, same footprint. */
+.ck-finalizing-well {
+  margin-top: 22px;
+  height: 240px;
+  border: 1px solid var(--ot-hairline-2);
+  border-radius: var(--ot-r-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  animation: ot-fade 0.15s ease-out;
+}
+
+.ck-finalizing-label {
+  font: 500 12.5px var(--ot-font-mono);
+  letter-spacing: 1px;
+  color: var(--ot-text-2);
+  text-transform: uppercase;
+}
+
+/* ---- address row -------------------------------------------------------------- */
+
+.ck-addr {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ot-chrome);
+  border: 1px solid var(--ot-hairline);
+  border-radius: var(--ot-r-md);
+  padding: 9px 10px;
+}
+
+.ck-addr-text {
+  flex: 1;
+  min-width: 0;
+  font: 400 12px var(--ot-font-mono);
+  color: var(--ot-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-count {
+  margin-top: 18px;
+}
+
+/* ---- footer hairline row ------------------------------------------------------ */
+
+.ck-foot {
+  margin-top: 18px;
+  border-top: 1px solid var(--ot-hairline-2);
+  padding-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  font: 400 11px var(--ot-font-mono);
+  color: var(--ot-text-4);
+}
+
+.ck-foot.is-right {
+  justify-content: flex-end;
+}
+
+/* ---- receipt rows (confirmed / underpaid / refunded) -------------------------- */
+
+.ck-rows {
+  margin-top: 24px;
+  border-top: 1px solid var(--ot-hairline-2);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 400 11.5px var(--ot-font-mono);
+  color: var(--ot-text-3);
+}
+
+.ck-rows .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ck-rows .value {
+  color: var(--ot-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- terminal typographic moments --------------------------------------------- */
+
+.ck-settle {
+  margin-top: 30px;
+  animation: ot-settle 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.ck-mega {
+  font: 700 88px/0.9 var(--ot-font-display);
+  letter-spacing: -4px;
+  color: var(--ot-green-dark-surface);
+}
+
+.ck-confirm-amt {
+  margin-top: 18px;
+  font: 700 40px/1 var(--ot-font-display);
+  letter-spacing: -1.5px;
+  color: var(--ot-text-hero);
+}
+
+.ck-confirm-amt .unit {
+  font: 700 16px var(--ot-font-display);
+  color: var(--ot-green-dark-surface);
+}
+
+.ck-under-hero {
+  font: 700 64px/0.9 var(--ot-font-display);
+  letter-spacing: -3px;
+  color: var(--ot-amber);
+}
+
+.ck-under-of {
+  margin-top: 10px;
+  font: 500 15px var(--ot-font-display);
+  color: var(--ot-text-2);
+}
+
+.ck-under-of .strong {
+  color: var(--ot-text);
+}
+
+.ck-under-track {
+  margin-top: 14px;
+  height: 5px;
+  background: var(--ot-hairline);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ck-under-fill {
+  height: 100%;
+  background: var(--ot-amber);
+  border-radius: 3px;
+}
+
+.ck-under-well {
+  margin-top: 20px;
+}
+
+.ck-expired-hero {
+  font: 700 72px/0.9 var(--ot-font-display);
+  letter-spacing: -3px;
+  color: var(--ot-expired-ink);
+}
+
+.ck-struck {
+  margin-top: 16px;
+  font: 500 20px/1 var(--ot-font-display);
+  letter-spacing: -0.5px;
+  color: var(--ot-text-3);
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.ck-expired-note {
+  margin-top: 20px;
+  font: 400 13px/1.55 var(--ot-font-display);
+  color: var(--ot-text-2);
+}
+
+.ck-late-well {
+  margin-top: 14px;
+  padding: 11px 13px;
+  font-size: 12.5px;
+}
+
+.ck-refund-hero {
+  font: 700 64px/0.9 var(--ot-font-display);
+  letter-spacing: -3px;
+  color: var(--ot-text);
+}
+
+.ck-refund-amt {
+  margin-top: 16px;
+  font: 700 28px/1 var(--ot-font-display);
+  letter-spacing: -1px;
+  color: var(--ot-text-2);
+}
+
+.ck-refund-amt .unit {
+  font: 700 14px var(--ot-font-display);
+}
+
+.ck-statement-sub {
+  margin-top: 10px;
+  font: 400 13px var(--ot-font-display);
+  color: var(--ot-text-2);
+}
+
+/* ---- return to store (secondary, below receipt rows) --------------------------- */
+
+.return-link {
+  display: inline-block;
+  margin-top: 18px;
+  border: 1px solid var(--ot-border-int);
+  border-radius: var(--ot-r-md);
+  padding: 11px 18px;
+  font: 700 13px var(--ot-font-display);
+  color: var(--ot-text);
+  text-decoration: none;
+}
+
+.return-link:hover {
+  background: var(--ot-chrome);
+  border-color: var(--ot-text-3);
+}
+
+/* ---- dev simulate: dashed hairline + DEV chip, outside the card ----------------- */
+
+.ck-dev {
+  font: 500 10.5px var(--ot-font-mono);
+  letter-spacing: 1px;
+  color: var(--ot-text-3);
+  background: transparent;
+  border: 1px dashed var(--ot-border-int);
+  border-radius: var(--ot-r-sm);
+  padding: 7px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ck-dev:hover:not(:disabled) {
+  color: var(--ot-text-2);
+  border-color: var(--ot-text-3);
+}
+
+.ck-dev:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ck-dev-chip {
+  background: var(--ot-border-int);
+  color: var(--ot-ink);
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ---- not found: no card, wordmark only ------------------------------------------ */
+
+.ck-notfound {
+  text-align: center;
+  padding: var(--ot-s-7) 0;
+}
+
+.ck-notfound-mark {
+  font: 700 13px var(--ot-font-mono);
+  letter-spacing: 4px;
+  color: var(--ot-text-4);
+  text-transform: uppercase;
+}
+
+.ck-notfound-title {
+  margin: 26px 0 10px;
+  font: 700 30px var(--ot-font-display);
+  letter-spacing: -1px;
+  color: var(--ot-text);
+}
+
+.ck-notfound-sub {
+  font: 400 13px/1.6 var(--ot-font-display);
+  color: var(--ot-text-2);
+}
+
+.ck-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: var(--ot-s-7) 0;
+  color: var(--ot-text-3);
+  font: 500 12.5px var(--ot-font-mono);
+  letter-spacing: 1px;
+}
+
+.powered {
+  font: 400 11px var(--ot-font-mono);
+  color: var(--ot-text-4);
+  margin: 0;
+}
+
+/* ---- desktop adaptation (pending only; others stay 400px single column) --------- */
+
+@media (min-width: 720px) {
+  .ck-root.is-wide {
+    max-width: 720px;
+  }
+
+  .ck-root.is-wide .ck-card {
+    border-radius: 14px;
+    box-shadow: var(--ot-card-shadow-lg);
+    padding: 32px 36px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "head head"
+      "amount qr"
+      "partial qr"
+      "addr qr"
+      "count qr"
+      "foot foot";
+    column-gap: 36px;
+    align-items: start;
+  }
+
+  .ck-root.is-wide .ck-head {
+    grid-area: head;
+  }
+  .ck-root.is-wide .ck-amount {
+    grid-area: amount;
+    margin-top: 30px;
+  }
+  .ck-root.is-wide .ck-amount .ck-hero {
+    font-size: 72px;
+    letter-spacing: -3px;
+  }
+  .ck-root.is-wide .ck-partial {
+    grid-area: partial;
+  }
+  .ck-root.is-wide .ck-qr-wrap {
+    grid-area: qr;
+    align-self: center;
+    margin-top: 22px;
+  }
+  .ck-root.is-wide .ck-qr-wrap .ot-qr {
+    padding: 14px;
+    min-height: calc(248px + 28px + 5px);
+  }
+  .ck-root.is-wide .ck-qr-wrap .ot-qr img {
+    width: 248px;
+    height: 248px;
+  }
+  .ck-root.is-wide .ck-addr {
+    grid-area: addr;
+    align-self: end;
+  }
+  .ck-root.is-wide .ck-count {
+    grid-area: count;
+  }
+  .ck-root.is-wide .ck-foot {
+    grid-area: foot;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-card,
+  .ck-settle,
+  .ck-finalizing-well,
+  .live-chip .dot,
+  .count.is-urgent .count-row .digits {
+    animation: none;
+  }
+}

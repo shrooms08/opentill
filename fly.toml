@@ -1,0 +1,39 @@
+# fly.toml app configuration file generated for opentill-demo on 2026-08-05T11:06:41+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'opentill-demo'
+primary_region = 'jnb'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  ADAPTER_MODE = 'mock'
+  HOST = '0.0.0.0'
+  OPENTILL_DB_PATH = '/data/opentill.db'
+  OPENTILL_MERCHANT_NAME = 'Satoshi Beans'
+  PORT = '8080'
+
+[[mounts]]
+  source = 'opentill_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '3s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/healthz'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

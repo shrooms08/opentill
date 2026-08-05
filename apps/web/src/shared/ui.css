@@ -1,0 +1,337 @@
+/* Shared v2 primitives consumed by both pages. Variables only — see tokens.css. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--ot-bg);
+  color: var(--ot-text);
+  font-family: var(--ot-font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--ot-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- buttons (tokens: button matrix) --------------------------------------- */
+
+.btn-primary {
+  background: var(--ot-accent);
+  border: none;
+  border-radius: var(--ot-r-md);
+  padding: 11px 18px;
+  font: 700 13px var(--ot-font-display);
+  color: var(--ot-ink);
+  cursor: pointer;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--ot-accent-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--ot-accent-pressed);
+  transform: translateY(1px);
+}
+
+.btn-primary:disabled {
+  background: var(--ot-chrome-2);
+  color: var(--ot-text-3);
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--ot-border-int);
+  border-radius: var(--ot-r-md);
+  padding: 11px 18px;
+  font: 700 13px var(--ot-font-display);
+  color: var(--ot-text);
+  cursor: pointer;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--ot-chrome);
+  border-color: var(--ot-text-3);
+}
+
+.btn-secondary:active:not(:disabled) {
+  background: var(--ot-hairline);
+  transform: translateY(1px);
+}
+
+.btn-secondary:disabled {
+  border-color: var(--ot-hairline);
+  color: var(--ot-text-4);
+  cursor: not-allowed;
+}
+
+/* INVERSE — white fill micro buttons (COPY, RETRY, MAX): mono uppercase */
+.btn-inverse {
+  background: var(--ot-text);
+  border: none;
+  border-radius: var(--ot-r-sm);
+  padding: 7px 13px;
+  font: 700 10.5px var(--ot-font-mono);
+  letter-spacing: 1px;
+  color: var(--ot-ink);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.btn-inverse:hover:not(:disabled):not(.is-active) {
+  background: var(--ot-sheet);
+}
+
+.btn-inverse.is-active {
+  background: var(--ot-hairline);
+  color: var(--ot-text);
+}
+
+.btn-inverse:disabled {
+  background: var(--ot-chrome-2);
+  color: var(--ot-text-3);
+  cursor: not-allowed;
+}
+
+/* ON ORANGE — black fill, used only inside the orange hero card + POS flood */
+.btn-onaccent {
+  background: var(--ot-ink);
+  border: none;
+  border-radius: var(--ot-r-md);
+  padding: 10px 20px;
+  font: 700 12.5px var(--ot-font-display);
+  color: var(--ot-accent);
+  cursor: pointer;
+}
+
+.btn-onaccent:hover {
+  background: var(--ot-hairline-2);
+  color: var(--ot-accent-hover);
+}
+
+.btn-onaccent:active {
+  color: var(--ot-accent-pressed);
+  transform: translateY(1px);
+}
+
+/* ---- inputs ---------------------------------------------------------------- */
+
+.ot-input {
+  width: 100%;
+  background: var(--ot-bg);
+  border: 1px solid var(--ot-border-int);
+  border-radius: var(--ot-r-md);
+  padding: 12px 13px;
+  font: 400 13px var(--ot-font-display);
+  color: var(--ot-text);
+  outline: none;
+}
+
+.ot-input::placeholder {
+  color: var(--ot-text-3);
+}
+
+.ot-input:focus {
+  border-color: var(--ot-accent);
+  box-shadow: var(--ot-focus-ring);
+}
+
+.ot-input.is-error {
+  border-color: var(--ot-red-input-border);
+}
+
+.ot-input.mono {
+  font-family: var(--ot-font-mono);
+}
+
+.field-error {
+  margin-top: 6px;
+  font: 400 12px var(--ot-font-display);
+  color: var(--ot-red);
+}
+
+/* ---- QR block: the single bright object ------------------------------------ */
+
+.ot-qr {
+  box-sizing: border-box;
+  background: var(--ot-sheet);
+  border: 2.5px solid var(--ot-accent);
+  border-radius: var(--ot-r-lg);
+  padding: 12px;
+  width: fit-content;
+  /* Never wider than the card's content box, at any viewport. */
+  max-width: 100%;
+  /* Hold the block's footprint before the image data URL resolves. */
+  min-height: calc(216px + 24px + 5px);
+}
+
+/* Inner QR = the container's inner size exactly; capped so it can't overflow a
+   narrow card (max-width wins on small screens, aspect-ratio keeps it square). */
+.ot-qr img {
+  display: block;
+  width: 216px;
+  height: 216px;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.ot-qr.is-compact {
+  padding: 10px;
+  min-height: calc(176px + 20px + 5px);
+}
+
+.ot-qr.is-compact img {
+  width: 176px;
+  height: 176px;
+}
+
+.ot-qr.is-pos {
+  border-width: 3px;
+  border-radius: var(--ot-r-xl);
+  padding: 16px;
+  min-height: calc(296px + 32px + 6px);
+}
+
+.ot-qr.is-pos img {
+  width: 296px;
+  height: 296px;
+}
+
+/* POS on a phone: the step-2 QR steps down to 220px. */
+@media (max-width: 560px) {
+  .ot-qr.is-pos {
+    min-height: calc(220px + 32px + 6px);
+  }
+  .ot-qr.is-pos img {
+    width: 220px;
+    height: 220px;
+  }
+}
+
+/* ---- live status dot + mono label ------------------------------------------ */
+
+.live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 500 10.5px var(--ot-font-mono);
+  letter-spacing: 1px;
+  color: var(--ot-text-2);
+  text-transform: uppercase;
+}
+
+.live-chip .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ot-accent);
+  animation: ot-pulse 1.4s ease-in-out infinite;
+}
+
+.live-chip.is-green {
+  color: var(--ot-green-dark-surface);
+}
+
+.live-chip.is-green .dot {
+  background: var(--ot-green-dark-surface);
+}
+
+.live-chip.is-static .dot {
+  animation: none;
+}
+
+/* ---- wells ------------------------------------------------------------------ */
+
+.well-green {
+  background: var(--ot-green-well);
+  border: 1px solid var(--ot-green-well-border);
+  border-radius: 10px;
+  padding: 13px 14px;
+}
+
+.well-amber {
+  background: var(--ot-amber-well);
+  border: 1px solid var(--ot-amber-well-border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font: 400 13px/1.55 var(--ot-font-display);
+  color: var(--ot-amber-well-text);
+}
+
+.well-red {
+  background: var(--ot-red-well);
+  border: 1px solid var(--ot-red-well-border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font: 400 13px/1.5 var(--ot-font-display);
+  color: var(--ot-red);
+}
+
+/* ---- countdown (tokens: shifts at 2:00, class swap only) -------------------- */
+
+.count-row {
+  display: flex;
+  justify-content: space-between;
+  font: 400 11.5px var(--ot-font-mono);
+  color: var(--ot-text-3);
+}
+
+.count-row .digits {
+  font-weight: 700;
+  color: var(--ot-text);
+}
+
+.count-track {
+  margin-top: 7px;
+  height: 3px;
+  background: var(--ot-hairline);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.count-fill {
+  height: 100%;
+  background: var(--ot-text);
+  border-radius: 2px;
+}
+
+.count.is-urgent .count-row,
+.count.is-urgent .count-row .digits {
+  color: var(--ot-amber);
+}
+
+.count.is-urgent .count-row .digits {
+  animation: ot-pulse 1s ease-in-out infinite;
+}
+
+.count.is-urgent .count-fill {
+  background: var(--ot-amber);
+}
+
+/* ---- spinners --------------------------------------------------------------- */
+
+.ot-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--ot-hairline);
+  border-top-color: var(--ot-green-dark-surface);
+  border-radius: 50%;
+  animation: ot-spin 0.7s linear infinite;
+}
+
+.ot-spinner.is-small {
+  width: 18px;
+  height: 18px;
+  border-width: 2.5px;
+  border-top-color: var(--ot-accent);
+}

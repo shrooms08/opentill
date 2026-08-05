@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body { margin:0; background:#111111; font-family:'Space Grotesk',sans-serif; }
+a { color:#f7931a; text-decoration:none; }
+a:hover { color:#ffa733; text-decoration:underline; }
+@keyframes ot-pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+@keyframes ot-spin { to { transform:rotate(360deg); } }
+</style>
+</helmet>
+<section data-screen-label="Design tokens v2" style="padding:48px; display:flex; flex-direction:column; gap:36px; align-items:flex-start; max-width:1240px;">
+  <div style="max-width:720px;">
+    <div style="font:700 13px 'JetBrains Mono'; letter-spacing:4px; color:#f7931a;">OPENTILL · V2</div>
+    <h1 style="margin:10px 0 8px; font:700 28px 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">Design tokens &amp; component spec</h1>
+    <p style="margin:0; font-size:14px; line-height:1.6; color:#a1a1a1;">Names map 1:1 to CSS variables. Display face: <b style="color:#f5f5f5;">Space Grotesk Bold</b> (heroes, headings, buttons); JetBrains Mono for data, ids, timestamps, table numerals. <a href="Checkout v2.dc.html">Checkout v2</a> · <a href="Dashboard v2.dc.html">Dashboard v2</a></p>
+  </div>
+
+  <!-- COLORS -->
+  <div style="width:100%;" data-screen-label="Colors">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:12px;">COLOR</div>
+    <div style="display:grid; grid-template-columns:repeat(4, 280px); gap:12px;">
+      <sc-for list="{{ colors }}" as="c" hint-placeholder-count="8">
+        <div style="background:#141414; border:1px solid #262626; border-radius:12px; overflow:hidden;">
+          <div style="height:64px; background:{{ c.hex }}; border-bottom:1px solid #262626;"></div>
+          <div style="padding:12px 14px;">
+            <div style="display:flex; justify-content:space-between; font:500 12px 'JetBrains Mono';"><span style="color:#f5f5f5;">{{ c.name }}</span><span style="color:#6b6b6b;">{{ c.hex }}</span></div>
+            <div style="margin-top:4px; font:400 11.5px 'Space Grotesk'; color:#8a8a8a; line-height:1.45;">{{ c.use }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:12px; background:#141414; border:1px dashed #262626; border-radius:12px; padding:12px 16px; font:400 12.5px 'Space Grotesk'; color:#a1a1a1; line-height:1.6; max-width:1148px;">
+      Rules: pure neutrals only — no warm tints. <span style="color:#f7931a; font:500 12px 'JetBrains Mono';">--ot-accent</span> is the only privileged hue: filled pills/chips, hero balance card, primary buttons, active nav, live dots, QR frame, POS flood. White (<span style="font:400 12px 'JetBrains Mono'; color:#f5f5f5;">--ot-sheet</span>) is a working surface inset into dark chrome — never a page background.
+    </div>
+  </div>
+
+  <!-- TYPE -->
+  <div style="width:100%;" data-screen-label="Type scale">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:12px;">TYPE — SPACE GROTESK (display + UI) · JETBRAINS MONO (data, tabular-nums always)</div>
+    <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:24px 26px; display:flex; flex-direction:column; gap:16px; width:1100px;">
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-mega · SG 700 · 88–120px · -4px ls</span><span style="font:700 74px/0.9 'Space Grotesk'; letter-spacing:-3.5px; color:#ffffff;">Paid</span></div>
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-hero · SG 700 · 44–76px · -2.5px ls</span><span style="font:700 52px/1 'Space Grotesk'; letter-spacing:-2.5px; color:#ffffff;">50&#8201;000 <span style="font:700 20px 'Space Grotesk'; color:#f7931a;">sats</span></span></div>
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-title · SG 700 · 22–28px · -1px ls</span><span style="font:700 26px/1 'Space Grotesk'; letter-spacing:-1px; color:#f5f5f5;">Screen title</span></div>
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-stat · SG 700 · 20–22px · -.5px ls</span><span style="font:700 22px/1 'Space Grotesk'; letter-spacing:-.5px; color:#f5f5f5;">4&#8201;218&#8201;500</span></div>
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-body · SG 400/500 · 13–14px</span><span style="font:400 14px/1 'Space Grotesk'; color:#a1a1a1;">Body and helper prose, sentence case.</span></div>
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-data · JBM 400 · 12–12.5px</span><span style="font:400 12.5px/1 'JetBrains Mono'; color:#f5f5f5;">inv_9f3k…a2c7 · 2026-07-22 14:32:08</span></div>
+      <div style="display:flex; align-items:baseline; gap:24px;"><span style="width:250px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-t-label · JBM 500-700 · 9.5–11px · +1.5px ls</span><span style="font:700 11px 'JetBrains Mono'; letter-spacing:1.5px; color:#6b6b6b;">SECTION LABEL</span></div>
+      <div style="border-top:1px dashed #262626; padding-top:14px; font:400 12.5px 'Space Grotesk'; color:#a1a1a1; line-height:1.6;">Hero amounts render in Space Grotesk (display voice); anything in a table or data row renders in JetBrains Mono with tabular-nums. Sats: thin-space (U+2009) groups of three — <span style="font:500 12.5px 'JetBrains Mono'; color:#f5f5f5;">50&#8201;000 sats</span>; BTC 8-decimal on its own secondary line.</div>
+    </div>
+  </div>
+
+  <!-- SPACING / RADIUS -->
+  <div style="width:100%;" data-screen-label="Spacing and radius">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:12px;">SPACING · RADIUS</div>
+    <div style="display:flex; gap:12px;">
+      <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:20px 24px; width:540px;">
+        <div style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">SPACE SCALE — 4px base</div>
+        <div style="margin-top:14px; display:flex; flex-direction:column; gap:10px;">
+          <sc-for list="{{ spaces }}" as="s" hint-placeholder-count="7">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <span style="width:110px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">{{ s.name }}</span>
+              <span style="width:52px; font:500 12px 'JetBrains Mono'; color:#f5f5f5; text-align:right;">{{ s.px }}</span>
+              <div style="height:10px; background:#f7931a; border-radius:2px; width:{{ s.w }};"></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:20px 24px; width:540px;">
+        <div style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">RADIUS</div>
+        <div style="margin-top:14px; display:flex; gap:20px; align-items:flex-end;">
+          <div style="text-align:center;"><div style="width:64px; height:64px; border:1px solid #333333; border-radius:6px;"></div><div style="margin-top:8px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-r-sm 6</div></div>
+          <div style="text-align:center;"><div style="width:64px; height:64px; border:1px solid #333333; border-radius:8px;"></div><div style="margin-top:8px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-r-md 8</div></div>
+          <div style="text-align:center;"><div style="width:64px; height:64px; border:1px solid #333333; border-radius:12px;"></div><div style="margin-top:8px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-r-lg 12</div></div>
+          <div style="text-align:center;"><div style="width:64px; height:64px; border:1px solid #333333; border-radius:16px;"></div><div style="margin-top:8px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-r-xl 16</div></div>
+          <div style="text-align:center;"><div style="width:64px; height:32px; border:1px solid #333333; border-radius:99px;"></div><div style="margin-top:8px; font:400 11px 'JetBrains Mono'; color:#6b6b6b;">--ot-r-pill 99</div></div>
+        </div>
+        <div style="margin-top:16px; border-top:1px dashed #262626; padding-top:12px; font:400 12px 'Space Grotesk'; color:#a1a1a1; line-height:1.6;">sm: tags, mini buttons · md: buttons, inputs, address rows · lg: cards, sheets, QR block · xl: page frames, hero cards · pill: status pills + filter chips.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUTTONS -->
+  <div style="width:100%;" data-screen-label="Buttons">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:12px;">BUTTONS — Space Grotesk 700, sentence case</div>
+    <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:22px 24px; width:1100px; display:grid; grid-template-columns:170px repeat(5, 1fr); gap:16px 20px; align-items:center;">
+      <span></span>
+      <span style="font:700 9.5px 'JetBrains Mono'; color:#4a4a4a; letter-spacing:1px;">DEFAULT</span><span style="font:700 9.5px 'JetBrains Mono'; color:#4a4a4a; letter-spacing:1px;">HOVER</span><span style="font:700 9.5px 'JetBrains Mono'; color:#4a4a4a; letter-spacing:1px;">ACTIVE</span><span style="font:700 9.5px 'JetBrains Mono'; color:#4a4a4a; letter-spacing:1px;">DISABLED</span><span style="font:700 9.5px 'JetBrains Mono'; color:#4a4a4a; letter-spacing:1px;">LOADING</span>
+      <span style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">PRIMARY<br>(filled accent)</span>
+      <button style="background:#f7931a; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#0a0a0a; cursor:pointer;">Create</button>
+      <button style="background:#ffa733; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#0a0a0a;">Create</button>
+      <button style="background:#d97f12; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#0a0a0a; transform:translateY(1px);">Create</button>
+      <button style="background:#2a2a2a; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#5a5a5a; cursor:not-allowed;">Create</button>
+      <button style="background:#f7931a; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#0a0a0a; display:inline-flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border:2px solid rgba(10,10,10,.3); border-top-color:#0a0a0a; border-radius:50%; animation:ot-spin .7s linear infinite;"></span>Create</button>
+      <span style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">SECONDARY<br>(hairline outline)</span>
+      <button style="background:transparent; border:1px solid #333333; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#f5f5f5; cursor:pointer;">Withdraw</button>
+      <button style="background:#1a1a1a; border:1px solid #6b6b6b; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#f5f5f5;">Withdraw</button>
+      <button style="background:#262626; border:1px solid #6b6b6b; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#f5f5f5; transform:translateY(1px);">Withdraw</button>
+      <button style="background:transparent; border:1px solid #262626; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#4a4a4a; cursor:not-allowed;">Withdraw</button>
+      <button style="background:transparent; border:1px solid #333333; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#f5f5f5; display:inline-flex; align-items:center; gap:8px;"><span style="width:12px; height:12px; border:2px solid #333333; border-top-color:#f5f5f5; border-radius:50%; animation:ot-spin .7s linear infinite;"></span>Withdraw</button>
+      <span style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">INVERSE<br>(white fill · COPY etc.)</span>
+      <button style="background:#f5f5f5; border:none; border-radius:6px; padding:8px 14px; font:700 10.5px 'JetBrains Mono'; letter-spacing:1px; color:#0a0a0a; cursor:pointer;">COPY</button>
+      <button style="background:#ffffff; border:none; border-radius:6px; padding:8px 14px; font:700 10.5px 'JetBrains Mono'; letter-spacing:1px; color:#0a0a0a;">COPY</button>
+      <button style="background:#262626; border:none; border-radius:6px; padding:8px 14px; font:700 10.5px 'JetBrains Mono'; letter-spacing:1px; color:#f5f5f5;">COPIED ✓</button>
+      <button style="background:#2a2a2a; border:none; border-radius:6px; padding:8px 14px; font:700 10.5px 'JetBrains Mono'; letter-spacing:1px; color:#5a5a5a; cursor:not-allowed;">COPY</button>
+      <span style="font:400 11.5px 'Space Grotesk'; color:#6b6b6b;">active = copied, dark fill for 2s then reverts</span>
+      <span style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">ON ORANGE<br>(black fill)</span>
+      <button style="background:#0a0a0a; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#f7931a; cursor:pointer;">Withdraw</button>
+      <button style="background:#1e1e1e; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#ffa733;">Withdraw</button>
+      <button style="background:#000000; border:none; border-radius:8px; padding:11px 18px; font:700 13px 'Space Grotesk'; color:#d97f12; transform:translateY(1px);">Withdraw</button>
+      <span style="font:400 11.5px 'Space Grotesk'; color:#6b6b6b; grid-column:span 2;">used only inside the orange hero card + POS flood</span>
+    </div>
+  </div>
+
+  <!-- INPUTS + COUNTDOWN -->
+  <div style="width:100%;" data-screen-label="Inputs and countdown">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:12px;">INPUTS · COUNTDOWN URGENCY</div>
+    <div style="display:flex; gap:12px; align-items:stretch;">
+      <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:20px 24px; width:540px; display:flex; flex-direction:column; gap:14px;">
+        <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1px; color:#4a4a4a;">DEFAULT</div>
+        <input placeholder="Memo (optional)" style="margin-top:6px; width:100%; box-sizing:border-box; background:#0a0a0a; border:1px solid #333333; border-radius:8px; padding:12px 13px; font:400 13px 'Space Grotesk'; color:#f5f5f5; outline:none;"></div>
+        <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1px; color:#4a4a4a;">FOCUS — accent border + 2px ring</div>
+        <input value="Order #1043" style="margin-top:6px; width:100%; box-sizing:border-box; background:#0a0a0a; border:1px solid #f7931a; border-radius:8px; padding:12px 13px; font:400 13px 'Space Grotesk'; color:#f5f5f5; outline:none; box-shadow:0 0 0 2px rgba(247,147,26,.25);"></div>
+        <div><div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1px; color:#4a4a4a;">ERROR — message below, never a toast</div>
+        <input value="bc1q-not-an-address" style="margin-top:6px; width:100%; box-sizing:border-box; background:#0a0a0a; border:1px solid #6b3530; border-radius:8px; padding:12px 13px; font:400 13px 'JetBrains Mono'; color:#f5f5f5; outline:none;">
+        <div style="margin-top:6px; font:400 12px 'Space Grotesk'; color:#c56a62;">That doesn't look like a valid address.</div></div>
+      </div>
+      <div style="background:#141414; border:1px solid #262626; border-radius:12px; padding:20px 24px; width:540px;">
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1px; color:#4a4a4a;">COUNTDOWN — SHIFTS AT 2:00, CLASS SWAP ONLY</div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:18px;">
+          <div>
+            <div style="display:flex; justify-content:space-between; font:400 11.5px 'JetBrains Mono'; color:#6b6b6b;"><span>Expires in</span><span style="font-weight:700; color:#f5f5f5;">09:42</span></div>
+            <div style="margin-top:7px; height:3px; background:#262626; border-radius:2px;"><div style="width:65%; height:100%; background:#f5f5f5; border-radius:2px;"></div></div>
+            <div style="margin-top:6px; font:400 11px 'Space Grotesk'; color:#6b6b6b;">&gt; 2:00 — white on dark, quiet</div>
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; font:400 11.5px 'JetBrains Mono';"><span style="color:#d9a441;">Expires in</span><span style="font-weight:700; color:#d9a441; animation:ot-pulse 1s ease-in-out infinite;">01:58</span></div>
+            <div style="margin-top:7px; height:3px; background:#262626; border-radius:2px;"><div style="width:13%; height:100%; background:#d9a441; border-radius:2px;"></div></div>
+            <div style="margin-top:6px; font:400 11px 'Space Grotesk'; color:#6b6b6b;">≤ 2:00 — amber, digits pulse at 1s</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PILLS -->
+  <div style="width:100%;" data-screen-label="Status pill spec">
+    <div style="font:500 11px 'JetBrains Mono'; letter-spacing:2px; color:#6b6b6b; margin-bottom:12px;">STATUS PILLS — 7 STATUSES × 2 SURFACES · r-pill · 4px 11px pad · JBM 700 10px</div>
+    <div style="display:flex; gap:12px; width:1100px;">
+      <div style="flex:1; background:#141414; border:1px solid #262626; border-radius:12px; padding:20px 24px;">
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#4a4a4a;">ON DARK — TINT VARIANT (bg = status @ 14–20%)</div>
+        <div style="margin-top:14px; display:flex; flex-direction:column; gap:10px;">
+          <sc-for list="{{ pills }}" as="p" hint-placeholder-count="7">
+            <div style="display:flex; align-items:center; gap:16px;">
+              <span style="width:140px;"><span style="display:inline-flex; align-items:center; gap:6px; border-radius:99px; padding:4px 11px; font:700 10px 'JetBrains Mono'; letter-spacing:.5px; background:{{ p.tintBg }}; color:{{ p.tintFg }};"><span style="width:5px; height:5px; border-radius:50%; background:{{ p.tintFg }};"></span>{{ p.label }}</span></span>
+              <span style="font:400 11px 'JetBrains Mono'; color:#6b6b6b;">{{ p.tintSpec }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:1; background:#ffffff; border-radius:12px; padding:20px 24px;">
+        <div style="font:700 9.5px 'JetBrains Mono'; letter-spacing:1.5px; color:#b0b0b0;">ON WHITE SHEET — SOLID VARIANT (ref-2)</div>
+        <div style="margin-top:14px; display:flex; flex-direction:column; gap:10px;">
+          <sc-for list="{{ pills }}" as="p" hint-placeholder-count="7">
+            <div style="display:flex; align-items:center; gap:16px;">
+              <span style="width:140px;"><span style="display:inline-block; border-radius:99px; padding:4px 11px; font:700 10px 'JetBrains Mono'; letter-spacing:.5px; background:{{ p.solidBg }}; color:{{ p.solidFg }};">{{ p.label }}</span></span>
+              <span style="font:400 12px 'Space Grotesk'; color:#8a8a8a;">{{ p.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px; background:#141414; border:1px dashed #262626; border-radius:12px; padding:12px 16px; font:400 12.5px 'Space Grotesk'; color:#a1a1a1; line-height:1.6; max-width:1100px;">CONFIRMED is the only pill allowed black-fill on white (terminal good state, maximum contrast). Solid pills never appear on dark surfaces; tints never on white.</div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const colors = [
+      { name: '--ot-bg', hex: '#0a0a0a', use: 'True black canvas. The only page background.' },
+      { name: '--ot-chrome', hex: '#141414', use: 'Dark cards, panels, sidebars.' },
+      { name: '--ot-chrome-2', hex: '#1a1a1a', use: 'Table headers, hover fills, nested wells.' },
+      { name: '--ot-hairline', hex: '#262626', use: 'Borders on dark. Subtler row rules: #1e1e1e. Interactive borders: #333333.' },
+      { name: '--ot-sheet', hex: '#ffffff', use: 'White inset working surface + QR block. Rules on sheet: #efefef; heavy header rule: #0a0a0a.' },
+      { name: '--ot-text', hex: '#f5f5f5', use: 'Primary on dark. Pure white #ffffff reserved for hero numerals.' },
+      { name: '--ot-text-2', hex: '#a1a1a1', use: 'Secondary on dark.' },
+      { name: '--ot-text-3', hex: '#6b6b6b', use: 'Tertiary, labels. Faintest: #4a4a4a.' },
+      { name: '--ot-ink', hex: '#0a0a0a', use: 'Text on sheet + on orange. Secondary ink: #333333 / #8a8a8a.' },
+      { name: '--ot-accent', hex: '#f7931a', use: 'Bitcoin orange. Hover #ffa733, pressed #d97f12. On-white link text: #b56207.' },
+      { name: '--ot-green', hex: '#3f9e6a', use: 'Paid/confirmed. On dark: #57b380. Well bg #12241a, border #1e5c38.' },
+      { name: '--ot-amber', hex: '#d9a441', use: 'Pending-tint, underpaid, urgency. Well bg #221a0c, border #4a3a1a.' },
+      { name: '--ot-red', hex: '#c56a62', use: 'Errors, failed hooks, refund_pending. Well bg #211110, border #4a2320.' },
+      { name: '--ot-gray', hex: '#8a8a8a', use: 'Expired, refunded, neutral status.' },
+    ];
+    const T = {
+      PENDING:        { tintBg: 'rgba(217,164,65,.14)', tintFg: '#d9a441', tintSpec: 'amber 14%', solidBg: '#f0e3c8', solidFg: '#7a5a14', note: 'Invoice open, no full payment yet.' },
+      PAID:           { tintBg: 'rgba(63,158,106,.14)', tintFg: '#57b380', tintSpec: 'green 14%', solidBg: '#3f9e6a', solidFg: '#ffffff', note: 'Full amount seen, commit in flight.' },
+      CONFIRMED:      { tintBg: 'rgba(63,158,106,.20)', tintFg: '#6fcf97', tintSpec: 'green 20%', solidBg: '#0a0a0a', solidFg: '#7fd6a4', note: 'Committed. Terminal good state — black fill.' },
+      UNDERPAID:      { tintBg: 'rgba(217,164,65,.14)', tintFg: '#d9a441', tintSpec: 'amber 14%', solidBg: '#c99a3d', solidFg: '#0a0a0a', note: 'Expired with partial payment held.' },
+      EXPIRED:        { tintBg: 'rgba(138,138,138,.14)', tintFg: '#8a8a8a', tintSpec: 'gray 14%', solidBg: '#e8e8e8', solidFg: '#6b6b6b', note: 'Dead, nothing received.' },
+      REFUND_PENDING: { tintBg: 'rgba(197,106,98,.12)', tintFg: '#d08a84', tintSpec: 'red 12%', solidBg: '#f3ddda', solidFg: '#8a3a32', note: 'Refund initiated, not settled.' },
+      REFUNDED:       { tintBg: 'rgba(138,138,138,.18)', tintFg: '#a1a1a1', tintSpec: 'gray 18%', solidBg: '#4a4a4a', solidFg: '#e0e0e0', note: 'Money returned. Neutral, closed.' },
+    };
+    const pills = Object.keys(T).map(k => Object.assign({ label: k }, T[k]));
+    const spaces = [
+      { name: '--ot-s-1', px: '4px', w: '4px' }, { name: '--ot-s-2', px: '8px', w: '8px' },
+      { name: '--ot-s-3', px: '12px', w: '12px' }, { name: '--ot-s-4', px: '16px', w: '16px' },
+      { name: '--ot-s-5', px: '24px', w: '24px' }, { name: '--ot-s-6', px: '32px', w: '32px' },
+      { name: '--ot-s-7', px: '48px', w: '48px' },
+    ];
+    return { colors, pills, spaces };
+  }
+}
+</script>
+</body>
+</html>

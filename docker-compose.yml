@@ -1,0 +1,16 @@
+services:
+  opentill:
+    build: .
+    env_file: .env
+    environment:
+      OPENTILL_DB_PATH: /data/opentill.db
+      HOST: 0.0.0.0
+      PORT: "8080"
+    ports:
+      - "${OPENTILL_PORT:-8080}:8080"
+    volumes:
+      - opentill-data:/data
+    restart: unless-stopped
+
+volumes:
+  opentill-data:

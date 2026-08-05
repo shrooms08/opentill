@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+apps/web/dist
+dist
+*.db
+*.db-shm
+*.db-wal
+.env
+.git
+plugins
+examples
+Dockerfile
+docker-compose*.yml

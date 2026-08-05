@@ -1,0 +1,43 @@
+# One-command full demo: OpenTill + the Satoshi Beans demo store.
+# Dev-simulate is ON (mock adapter) so the checkout page has a demo pay button.
+#   docker compose -f docker-compose.demo.yml up --build
+# Store: http://localhost:4000   Dashboard: http://localhost:8080/dashboard
+services:
+  opentill:
+    build: .
+    environment:
+      OPENTILL_API_KEY: ${OPENTILL_API_KEY:-demo_api_key}
+      OPENTILL_WEBHOOK_SECRET: ${OPENTILL_WEBHOOK_SECRET:-demo_webhook_secret}
+      NODE_ENV: development
+      OPENTILL_DEV_PUBLIC_SIMULATE: "true"
+      ADAPTER_MODE: mock
+      OPENTILL_MERCHANT_NAME: Satoshi Beans
+      OPENTILL_DB_PATH: /data/opentill.db
+      HOST: 0.0.0.0
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - opentill-demo-data:/data
+
+  demo-store:
+    image: node:20-bookworm-slim
+    working_dir: /store
+    command: ["node", "server.mjs"]
+    volumes:
+      - ./examples/demo-store:/store:ro
+    environment:
+      OPENTILL_URL: http://opentill:8080 # store -> gateway (internal network)
+      OPENTILL_PUBLIC_URL: http://localhost:8080 # browser -> hosted checkout
+      DEMO_BASE_URL: http://demo-store:4000 # gateway -> store webhooks (internal)
+      DEMO_PUBLIC_BASE_URL: http://localhost:4000 # browser -> return/thanks links
+      OPENTILL_API_KEY: ${OPENTILL_API_KEY:-demo_api_key}
+      OPENTILL_WEBHOOK_SECRET: ${OPENTILL_WEBHOOK_SECRET:-demo_webhook_secret}
+      PORT: "4000"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - opentill
+
+volumes:
+  opentill-demo-data:
