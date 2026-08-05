@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LogoLockup } from "../shared/Logo";
 import { api, ApiError, clearKey, getStoredKey, storeKey, UNAUTHORIZED_EVENT } from "./api";
 import { useHashRoute } from "./router";
 import { Overview } from "./views/Overview";
@@ -27,10 +28,11 @@ export function App() {
   );
 }
 
-function Wordmark({ className }: { className: string }) {
+function Wordmark({ className, size }: { className: string; size: number }) {
+  // Canonical lockup (mark + wordmark) — geometry and colors in shared/Logo.tsx.
   return (
     <div className={className}>
-      Open<span className="accent">Till</span>
+      <LogoLockup size={size} />
     </div>
   );
 }
@@ -64,7 +66,7 @@ export function KeyPrompt({ onUnlocked }: { onUnlocked: () => void }) {
   return (
     <div className="gate">
       <form className="gate-form" onSubmit={(e) => void submit(e)}>
-        <Wordmark className="gate-wordmark" />
+        <Wordmark className="gate-wordmark" size={40} />
         <p className="gate-sub">
           Enter the API key from your server's <span className="mono">.env</span> (
           <span className="mono">OPENTILL_API_KEY</span>).
@@ -108,6 +110,13 @@ export function MockModeBanner({ adapterMode }: { adapterMode: string | null }) 
   );
 }
 
+const VIEW_TITLES: Record<string, string> = {
+  overview: "Overview",
+  invoices: "Invoices",
+  pos: "New charge",
+  payouts: "Payouts",
+};
+
 function Shell({ onLock }: { onLock: () => void }) {
   const route = useHashRoute();
   const [adapterMode, setAdapterMode] = useState<string | null>(null);
@@ -144,6 +153,11 @@ function Shell({ onLock }: { onLock: () => void }) {
     section = "overview";
   }
 
+  // Tab title tracks the active view: "OpenTill — Overview" etc.
+  useEffect(() => {
+    document.title = `OpenTill — ${VIEW_TITLES[section] ?? "Dashboard"}`;
+  }, [section]);
+
   const link = (href: string, label: string, key: string) => (
     <a href={href} className={section === key ? "nav-link active" : "nav-link"}>
       {label}
@@ -153,7 +167,7 @@ function Shell({ onLock }: { onLock: () => void }) {
   return (
     <div className="dash">
       <aside className="dash-side">
-        <Wordmark className="wordmark" />
+        <Wordmark className="wordmark" size={20} />
         <nav className="dash-nav">
           {link("#/", "Overview", "overview")}
           {link("#/invoices", "Invoices", "invoices")}

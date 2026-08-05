@@ -243,6 +243,12 @@
   justify-content: flex-end;
 }
 
+.ck-powered {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ---- receipt rows (confirmed / underpaid / refunded) -------------------------- */
 
 .ck-rows {

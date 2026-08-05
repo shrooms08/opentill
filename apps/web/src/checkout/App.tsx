@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckoutState } from "../shared/CheckoutState";
+import { truncateId } from "../shared/format";
 import { useInvoice } from "../shared/useInvoice";
 
 export function App() {
@@ -9,6 +10,11 @@ export function App() {
   }, []);
 
   const { invoice, notFound } = useInvoice(invoiceId);
+
+  // Tab title: "Checkout — inv_9f3k…a2c7" (static HTML title is the fallback).
+  useEffect(() => {
+    if (invoiceId) document.title = `Checkout — ${truncateId(invoiceId)}`;
+  }, [invoiceId]);
   const [simulateBusy, setSimulateBusy] = useState(false);
 
   const onSimulate = async () => {

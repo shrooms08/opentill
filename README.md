@@ -1,4 +1,7 @@
-# OpenTill
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/lockup-dark.svg">
+  <img src="docs/brand/lockup-light.svg" alt="OpenTill" width="360">
+</picture>
 
 OpenTill is a self-hosted Bitcoin payment gateway: one container that takes payments on the Tachi network (off-chain vaults backed by real on-chain Bitcoin), shows your customers a hosted checkout page, and gives you a merchant dashboard with a built-in point-of-sale. Your keys, your server, your money — including a unilateral exit that turns your balance back into plain on-chain Bitcoin without anyone's permission. It plugs into WooCommerce out of the box, and into anything else through a small JSON API with HMAC-signed webhooks.
 

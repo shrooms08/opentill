@@ -1,6 +1,7 @@
 import { CopyButton } from "./CopyButton";
 import { Countdown, useNow } from "./Countdown";
 import { formatBtc, formatSats, formatTimestamp, truncateId } from "./format";
+import { LogoMark } from "./Logo";
 import { Qr } from "./Qr";
 import type { PublicInvoice } from "./types";
 
@@ -158,7 +159,11 @@ function Foot({ invoice, right }: { invoice: PublicInvoice; right?: boolean }) {
   return (
     <div className={right ? "ck-foot is-right" : "ck-foot"}>
       {!right && <span>{truncateId(invoice.id)}</span>}
-      <span>Powered by OpenTill</span>
+      <span className="ck-powered">
+        {/* 16px mark, single-color at the footer's quiet gray — not orange. */}
+        <LogoMark size={16} singleColor="var(--ot-text-4)" />
+        Powered by OpenTill
+      </span>
     </div>
   );
 }
