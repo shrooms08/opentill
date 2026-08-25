@@ -1,172 +1,161 @@
-# OpenTill × Tachi — Integration Spec
+# OpenTill × Tachi — how the integration works
 
-**Audience:** the Tachi team, and whoever wires the real settlement adapter.
+**Status as of 2026-08-25: real settlement is live on Tachi regtest** for the
+whole merchant-facing receive path — per-invoice addresses, payment detection,
+`seen → committed` confirmation, and refunds — proven end to end against
+`https://rpc-regtest.tachibtc.com` with real transaction ids (below). The
+mock adapter remains the test/demo/CI adapter; `ADAPTER_MODE=tachi` selects
+the real one behind the same `TachiAdapter` interface.
 
-> **Status as of 2026-07-22.** Tachi answered our questions partially. **Q1
-> (co-signing) is ANSWERED** — the node co-signs automatically on broadcast; no
-> separate signing step. **Q3 (vault/validator access) is PARTIALLY ANSWERED** —
-> Tachi runs hosted regtest/Signet RPC (no local validator set to obtain); their
-> endpoints land via Swagger shortly. **Q2 (receiver-side detection) remains
-> OPEN.** Net effect: the entire *send* path is now specification-complete and
-> waiting only on published endpoints. Target integration date: **2026-08-15**.
+What is **not** implemented in real mode: **payouts to L1** — cooperative
+withdrawal and unilateral exit. §5 says exactly why and what it would take.
 
-OpenTill is a complete, self-hosted Bitcoin merchant gateway — invoicing, hosted
-checkout, dashboard, POS, refunds, cooperative withdrawals, and unilateral exit —
-running today against an in-memory **mock** settlement layer. Everything above
-the settlement boundary is built and tested (184 tests). The only thing between
-mock mode and real Bitcoin is one file: [`packages/adapter/src/tachi.ts`](packages/adapter/src/tachi.ts).
-
-That file compiles today without the `@tachibtc/*` packages and is written as
-documentation-as-code: every method contains the exact SDK calls it will make,
-with **three `BLOCKED()` markers** at the points not yet wireable. As of
-2026-07-22 one of the three (Q1, co-signing) is answered and now waits only on a
-published endpoint; the markers stay until the endpoints exist. This document is
-the map.
-
-> **Why we shipped in mock mode.** We could not verify the `@tachibtc/*`
-> packages or reach Tachi's hosted node with published endpoints in time, and
-> the receiver-side detection path (Q2) is still an open design question. Rather
-> than fake it, OpenTill labels mock mode everywhere (dashboard footer bar,
-> `/healthz`, this doc) and positions the adapter interface as the integration
-> contract. With Q1 answered the send path is now specification-complete; the
-> architecture makes the remaining swap-in small — see §4.
+Ground truth for every claim here: [`docs/tachi-smoke-output.md`](docs/tachi-smoke-output.md)
+(verbatim daemon responses) and [`docs/tachi-e2e-output.md`](docs/tachi-e2e-output.md)
+(the full round trip through the gateway).
 
 ---
 
-## 1. What OpenTill needs from a settlement layer
+## 1. The ledger model OpenTill builds on (verified)
 
-Everything OpenTill needs is the [`TachiAdapter`](packages/adapter/src/types.ts)
-interface — 9 methods. Nothing in the gateway, poller, webhook dispatcher, UI,
-or test suite knows which implementation is behind it; swapping mock → real is a
-factory `case`.
+- A Tachi ledger **VTXO** is `{ id, owner, amount, spent, height, script, locked }`.
+  `owner` is a **32-byte x-only secp256k1 key**. Ownership is keyed on the key,
+  not on an L1 output — receiving involves nothing on L1.
+- A **receive address** is that x-only key encoded as a bech32m P2TR output key
+  (`bcrt1p…` / `tb1p…` / `bc1p…`); the daemon and `xOnlyFromAddress` decode it
+  straight back. `getAddressVtxos(address | pubkeyHex)` returns the owner's VTXOs.
+- A **transfer** between two keys is a `TachiTx` of type `TRANSFER` with
+  `inputs: [{ vtxoId, txid: 0x00…, vout: 0, valueSats }]`, `outputs:
+  [{ owner, amount }]`, `fee`, `nonce`, `pubKey`, a BIP-340 signature over the
+  TachiTx sighash, and an **empty PSBT payload** — no vault, no PSBT, no quorum
+  round. The node co-signs on broadcast (Tachi-confirmed; observed).
+- `vtxoId = SHA256(txHash ‖ be32(vout))` (`computeVtxoId`) for deposits **and**
+  transfers — so a *pending* tx already yields the exact VTXO id that later
+  commits. That is what makes `seen → committed` a stable identity.
+- Transaction alerts arrive twice on `/tachi_ws` (`state: "pending"` on CheckTx,
+  `state: "committed"` on block commit), for the **receiver's** address filter
+  too. Blocks commit every few seconds on regtest.
+- **A resolved promise is not success.** `broadcastTxSync` returns HTTP 200
+  with the verdict inside: `result.code` (0 = mempool accepted), `result.log`.
+  Mempool acceptance is not a commit; `waitForTachiTxCommit` (or `/tachi_tx`)
+  is the confirmation. OpenTill treats a send as done only on `code === 0`
+  **and** `committed === true`.
 
-| Method | What it does | Lifecycle it serves |
+## 2. Key management
+
+One BIP-39 mnemonic (`TACHI_MNEMONIC`) derives every merchant key along BIP-84
+paths using the SDK's own `deriveUserKey` (so Tachi tooling reproduces the same
+descriptors):
+
+| Key | Path (regtest) | Role |
 | --- | --- | --- |
-| `init()` | Connect to the daemon, create/derive the merchant vault. | Boot. |
-| `createReceiveAddress(ref)` | Derive a fresh receive address in the vault. | **Invoice creation** — every invoice gets a unique address. |
-| `watchAddress(addr)` / `unwatchAddress(addr)` | Register/unregister addresses the poller cares about. | Invoice creation / cleanup. |
-| `pollIncoming(cursor)` | Return new payments to watched addresses since `cursor`, each `seen` or `committed`, plus the next cursor. | **Payment detection + confirmation.** `seen` → invoice `paid`; `committed` (all credited payments) → `confirmed`. |
-| `send({ toAddress, amountSats, ref })` | Send sats out (cooperative spend). | **Refunds.** `confirmed → refund_pending → refunded`. |
-| `getBalance()` | `{ offchainSats, onchainSats }`. | Dashboard balance; payout MAX. |
-| `initiatePayout({ kind, toAddress, amountSats? })` | Start a `cooperative` withdrawal or a unilateral `exit`. | **Payouts.** Cooperative: quorum co-signs. Exit: broadcast the exit leaf alone, timelock in blocks. |
-| `pollPayouts()` | Current status of all non-settled payouts. | Payout lifecycle: `initiated → broadcasting → settled` (cooperative) / `initiated → waiting_timelock → settled` (exit). |
+| till | `m/84'/1'/0'/0/0` (receive chain, index 0) | the merchant float — refunds are paid from whichever key covers `amount + fee`; fund this one |
+| invoice *n* | `m/84'/1'/0'/1/n` (change chain) | one fresh key per invoice; the customer pays to its P2TR address |
 
-The invoice state machine (`pending → paid → confirmed`, with `underpaid`,
-`expired`, refund and exit branches) is driven entirely by `pollIncoming` +
-`pollPayouts` return values. The adapter never has to know about invoices,
-webhooks, or SQLite.
+The adapter keeps a small JSON index (`TACHI_STATE_PATH`, default next to the
+SQLite file): handed-out keys, the next invoice index, and the watched-address
+set — re-derivable from the mnemonic, written atomically, and what lets a
+restarted gateway keep detecting payments to open invoices.
 
----
+**Cost model:** a key is free (pure derivation) — no vault, no L1 tx per
+invoice. That is why OpenTill does *not* create a Taurus vault per invoice.
 
-## 2. What the Tachi docs provide today
+## 3. `TachiAdapter` → daemon calls
 
-Honest mapping of each adapter method against the documented `@tachibtc/*`
-surface (per docs.tachibtc.com, mirrored as local interfaces in `tachi.ts`).
-**Fully** = documented SDK function exists; **Partial** = composable from
-documented primitives but with an open question; **Blocked** = no documented
-path.
-
-| Adapter method | Coverage | Notes |
+| Method | Real implementation | Proven by |
 | --- | --- | --- |
-| `init` | **Partial (Q3)** | `daemon-client.connect()` documented; points at Tachi-hosted regtest/Signet RPC. `createVault()` endpoint pending Swagger. |
-| `createReceiveAddress` | **Partial (Q3)** | Vault creation is against Tachi's hosted node, not a local validator set; endpoint pending Swagger. |
-| `watchAddress` / `unwatchAddress` | **Partial** | Implementable once we can enumerate incoming VTXOs (Q2). |
-| `pollIncoming` | **Blocked (Q2)** | Docs cover *sending* VTXOs; no documented **receiver-side** detection of an incoming VTXO to an address we control. (The `seen → committed` step is no longer a blocker — Q1 answered: the node co-signs on broadcast.) |
-| `send` (refund) | **Answered, pending endpoint (Q1)** | `buildVtxoPsbt → verify → sign → broadcast`; the node co-signs automatically on broadcast. Spec-complete once the broadcast endpoint is published. |
-| `getBalance` | **Partial** | On-chain via daemon; off-chain = sum of committed VTXOs, which needs Q2. |
-| `initiatePayout` (cooperative) | **Answered, pending endpoint (Q1)** | Same auto-co-sign-on-broadcast path as `send`. No separate signing endpoint to call. |
-| `initiatePayout` (exit) | **Fully (after Q3 endpoint)** | `buildExitPsbt → sign → broadcast` needs no quorum — the sovereignty path is the *least* blocked. Only needs a vault (Q3). |
-| `pollPayouts` | **Partial** | Cooperative: watch the broadcast tx. Exit: recompute timelock from `getBlockHeight()`. |
+| `init()` | `getHealth` + `getStatus`; refuses to boot if the daemon's chain id doesn't match `TACHI_NETWORK`; logs chain id + height + till address | e2e boot; unit test |
+| `createReceiveAddress` | next change-chain key → P2TR address, persisted | e2e invoice `inv_d5884327…` |
+| `watchAddress` / `unwatchAddress` | persisted watched set | e2e |
+| `pollIncoming(cursor)` | per watched address: `getMempoolByAddress` → **seen** (paymentId = `computeVtxoId(tx_hash, vout)`), `getAddressVtxos(addr, includeSpent)` → **committed** for VTXOs above the height cursor. Cursor = daemon height at tick start − 1, so a block landing mid-tick is never skipped; the gateway is idempotent on `(paymentId, status)` | e2e: invoice `pending → confirmed` via real ticks (the block landed before the first tick, so the gateway saw the payment straight as `committed`; the `seen` mapping is unit-tested and the underlying `pending`→`committed` alert pair was observed live via `watch` in the smoke) |
+| `send` (refund) | pick one key covering `amount + fee` (one TachiTx = one signer), largest-first inputs, change back, `getAccountNonce`, sign, `broadcastTxSync` → assert `code === 0` → `waitForTachiTxCommit` → assert committed; returns the tx hash | e2e refund `698e3128…bf71` |
+| `getBalance` | off-chain = Σ `getBalance(key)`; on-chain = `scantxoutset` over our `addr()` descriptors through the daemon's Bitcoin RPC proxy (cached) | e2e: 39 998 off-chain / 200 000 on-chain |
+| `initiatePayout` | **not implemented** — returns a `failed` payout with the reason (§5) | unit test |
+| `pollPayouts` | `[]` | — |
 
-**Summary:** with Q1 answered, the entire *sending* side (payments' commit,
-refunds, cooperative payouts, exit) is specification-complete and waiting only on
-Tachi's published RPC endpoints. The one remaining design gap is **(Q2)
-receiving** — detecting incoming VTXOs to an address we control. Vault creation
-**(Q3)** is understood (hosted node, not local validator set) and also waiting on
-the endpoint.
+Polling is the correctness path (crash-safe by construction). `watch()` was
+verified in the smoke as a future low-latency supplement but is not wired in.
 
----
+## 4. What ran for real (ids)
 
-## 3. The three blocking questions
+Smoke (`npm run smoke:tachi`, regtest):
 
-Each maps to exactly one `BLOCKED()` marker in `tachi.ts`.
+- daemon `tachi-regtest-1`, height 482 085 at connect, 7 validators
+- faucet → L1: `46644a82…57db`, `dfc5c71b…6eb9` (0.001 BTC each to our taproot
+  address; confirmed at L1 height 9438)
+- self-signed ledger deposit **rejected** with `code 8: fee below minimum` at
+  fee 0, **committed** at fee 1: tx `24fef4e7…fbed` → VTXO `04411f3a…8200`
+  (50 000 sats, height 482 189)
+- plain key→key transfer, no vault/PSBT: tx `c930934b…a789`, height 482 190
+  (10 000 to key1, 39 999 change); `pending` + `committed` alerts received on
+  **both** sender and receiver `watch({ address })` filters
 
-### Q1 — Co-signing trigger mechanics (`Q1-cosign-trigger`) — ✅ ANSWERED
-- **Answer (Tachi, 2026-07-22):** *"the Tachi node co-signs automatically on
-  broadcast across devnet/regtest, Signet, mainnet; no separate signing
-  endpoint."* There is no quorum round for us to drive — we build and sign our
-  part, broadcast, and the node co-signs as part of accepting the broadcast.
-- **What this unblocks:** the entire **send path** — cooperative payouts, refunds
-  (`send`), and the `seen → committed` confirmation of incoming payments. All of
-  it collapses to build → sign-our-part → broadcast.
-- **Remaining blocker:** endpoint details only. We need the published broadcast
-  RPC to call; the *mechanism* is settled. The scaffold's `BLOCKED` marker stays
-  in place until that endpoint exists, but it now represents "waiting on the
-  endpoint," not "waiting on the design."
+E2E (`npm run e2e:tachi`, gateway booted in-process with `ADAPTER_MODE=tachi`):
 
-### Q2 — Receiver-side incoming-VTXO detection (`Q2-receiver-detection`) — ⏳ OPEN
-- **Where it blocks:** `pollIncoming` (and therefore `watchAddress`,
-  `getBalance`).
-- **Why it blocks:** OpenTill's whole model is "watch a per-invoice address,
-  react when money lands." The docs cover creating and sending VTXOs; we found
-  no documented **receiver** API — given a vault address we control, how do we
-  learn a VTXO was credited to it and read its `pending`/`committed` state.
-- **Unblocks:** payment detection → the entire invoice lifecycle, balance.
-- **Three answer shapes we proposed (any one works), best-first:**
-  1. **Subscribe / stream** — a push feed (websocket / gRPC stream) of VTXOs by
-     watched address. Lets us drop polling and emit to checkout even faster.
-  2. **Pollable query** — a `listVtxos({ address, sinceCursor })`-style call
-     (including a raw ABCI query we issue ourselves) that maps directly onto our
-     existing cursor-based poller.
-  3. **Scan committed VTXOs by output address** — if we can enumerate committed
-     VTXOs and filter by output address, we can reconstruct credits ourselves.
+- invoice `inv_d5884327d79942c0a2c108be710a27c1` (5 000 sats) → real address
+  `bcrt1p…` on change-chain index 0
+- customer payment tx `d8fb214ede5a678a64e093262ca3b8572e081a5d06eeaec7721a5c0c2976146f`
+  → first poller tick (t+0.8 s) saw it `committed` → invoice `confirmed`
+- refund tx `698e31285df5a0b6e383b05764799abc915d98e617b726f4847e8c73b90ebf71`
+  (till → customer) → invoice `refunded`
+- balances: merchant 44 999 → 39 998 (till 39 999 → 34 998, invoice key 5 000);
+  customer 10 000 → 4 999 → 9 999
 
-### Q3 — Vault creation / validator access (`Q3-validator-access`) — 🟡 PARTIALLY ANSWERED
-- **Answer (Tachi, 2026-07-22):** there is **no local validator set** to obtain;
-  Tachi provides **hosted regtest/Signet RPC** and vaults are created against
-  that node. A **local regtest `bitcoind` per the tutorial will NOT work** against
-  their node — it's a private network. Concrete endpoints arrive via **Swagger
-  shortly**.
-- **Where it blocks:** `createReceiveAddress` (via `createVault`) and `init`.
-- **Remaining blocker:** the published vault-creation endpoint. The model is now
-  clear (talk to Tachi's hosted node, not a local chain), so this is an endpoint
-  wiring task, not an unknown.
-- **Implication for testing:** our "run against regtest" plan targets **Tachi's
-  hosted regtest RPC**, not a local `bitcoind`.
+## 5. Not implemented in real mode — and what it takes
 
----
+**L1 payouts (cooperative withdrawal, unilateral exit).** Today the merchant's
+funds are ledger VTXOs owned by plain keys. Moving value ledger → L1 needs one
+of two things the shipped SDK does not give a plain-key holder:
 
-## 4. Swap-in plan (questions answered → real settlement live)
+1. **A Taurus vault**: `createVault` (2-leaf P2TR: cooperative 5-of-7 leaf +
+   CSV exit leaf, quorum from `fetchConsensusQuorum`) → `depositToVault` (an L1
+   transaction from a **P2WPKH** funding wallet, i.e. the wallet-aggregator with
+   `scantxoutset` via the daemon's RPC proxy) → L1 confirmation →
+   `registerVault` (`TxVaultOpen`). With a vault, cooperative withdrawal is
+   `buildRefundPsbt → signRefundPsbtAsUser → cosignRefund (/tachi_signTransaction)
+   → finalizeRefundPsbt → sendrawtransaction`, and unilateral exit is
+   `buildUnilateralExitPsbt → sign → finalize → sendrawtransaction` after the
+   CSV delay — daemon-free, the sovereignty path.
+2. **`TxWithdraw`** (wire type 5) — exists in the daemon's tx types but the SDK
+   ships no builder and no documentation of its semantics, so it cannot be
+   implemented honestly from the client side.
 
-The architecture is designed so this is **days, not weeks**:
+Regtest L1 blocks are slow (minutes to hours between blocks during this
+session), which is why the vault path was not attempted in this timebox. The
+adapter therefore returns a `failed` payout carrying that explanation rather
+than pretending. The dashboard's Payouts view shows it as such.
 
-1. **Install the SDK** (once the packages + token are confirmed):
-   `npm i @tachibtc/daemon-client @tachibtc/vault-core -w @opentill/adapter`.
-   Replace the local mirror interfaces in `tachi.ts` with the real imports (the
-   signatures already match the documented surface).
-2. **Point config at Tachi's hosted node:** flip `ADAPTER_MODE=tachi` and add the
-   hosted regtest/Signet RPC connection settings (URL / token) — **not** a local
-   `bitcoind`. `init()` stops throwing once the vault-creation endpoint is wired.
-3. **Fill the sections in `tachi.ts`** — each is already a commented walkthrough:
-   - **Q1 (answered)** → `send` + `initiatePayout` cooperative: build → sign our
-     part → broadcast; the node co-signs on broadcast. Just wire the published
-     broadcast endpoint — no quorum protocol to implement.
-   - **Q3 (endpoint pending)** → `createReceiveAddress`/`init`: call the hosted
-     node's `createVault` / address-derivation endpoint (from Swagger).
-   - **Q2 (open)** → `pollIncoming`: whichever of the three answer shapes Tachi
-     ships (subscribe, pollable query, or scan-by-output-address), map VTXO state
-     → seen/committed. The `exit` payout and `getBalance`/`watchAddress` follow.
-4. **Run the existing suite against Tachi's hosted regtest.** The gateway e2e
-   tests (`packages/gateway/test/*`) are adapter-agnostic — they drive the invoice
-   and payout lifecycles through the `TachiAdapter` interface. The mock's
-   deterministic `advanceBlocks()` maps to regtest block generation on the hosted
-   node.
+**Open questions for the Tachi team:**
 
-**Estimate:** the *send* path (Q1) is now specification-complete — with endpoints
-published it is wiring, not design. Remaining real work is **Q2** (detection, the
-one load-bearing unknown) plus endpoint plumbing for Q3. Once Tachi publishes the
-Swagger endpoints and answers Q2, ~2–3 days: roughly a day on Q2 detection, half
-a day each on vault bootstrap (Q3) and the send/exit endpoints, the rest
-validating against the existing suite. Target: **2026-08-15**. The small size is
-the whole point of the adapter boundary — the product doesn't change, only this
-one file gets wired up.
+1. *Is there a supported ledger → L1 withdrawal for plain-key VTXO holders (the
+   `TxWithdraw` wire type), or is a registered Taurus vault the only exit — and
+   if so, can a vault be funded from ledger VTXOs rather than from an L1 P2WPKH
+   wallet?* (Unblocks real-mode cooperative withdrawal + unilateral exit.)
+2. *The regtest daemon accepts a **self-signed `TxDeposit` with no L1 backing**
+   (fee ≥ 1 sat) — we used that to fund keys. Is that regtest-only? On signet /
+   mainnet, what is the sanctioned way ledger value comes into existence for a
+   merchant — vault deposit only?* (Determines the onboarding story outside regtest.)
+
+Smaller caveats: fees are the daemon's `min_fee_sat` (1 sat on regtest); a
+refund needs a *single* key holding `amount + fee` (fund the till); on-chain
+balance via `scantxoutset` is a full-UTXO-set scan and is cached for 60 s.
+
+## 6. Running it
+
+```bash
+# 1) key material (test coins only)
+node -e "console.log(require('bip39').generateMnemonic())"
+
+# 2) .env
+ADAPTER_MODE=tachi
+TACHI_MNEMONIC="…"
+TACHI_NETWORK=regtest              # or signet + TACHI_RPC_URL=https://rpc-signet.tachibtc.com
+
+# 3) fund the till key once (its address is in the boot log) with a ledger transfer and go
+#    (regtest only: scripts/tachi-smoke.ts mints a self-signed ledger deposit; the L1 faucet does NOT credit the ledger)
+npm run dev                        # logs: tachi: connected {chainId, height, tillAddress}
+```
+
+Node ≥ 22 is required in tachi mode (the SDK's engines floor). The mock is
+untouched: `npm test` never touches the network; `npm run smoke:tachi` and
+`npm run e2e:tachi` do.

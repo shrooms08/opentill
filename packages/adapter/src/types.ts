@@ -62,12 +62,30 @@ export interface TachiAdapter {
 
 export type AdapterMode = "mock" | "tachi";
 
+/** Settings for the real Tachi adapter (ADAPTER_MODE=tachi). */
+export interface TachiAdapterConfig {
+  /** Daemon RPC base URL, e.g. https://rpc-regtest.tachibtc.com */
+  rpcUrl: string;
+  /** Address encoding / coin type. */
+  network: "regtest" | "signet";
+  /** BIP-39 mnemonic every merchant key derives from. Never logged. */
+  mnemonic: string;
+  /** JSON file holding handed-out keys + watched addresses (re-derivable index, not a secret). */
+  statePath: string;
+  /** Optional daemon API key (X-Api-Key). */
+  apiKey?: string;
+  /** Boot/operational log sink (network + height on connect, etc.). */
+  log?: (msg: string, meta?: Record<string, unknown>) => void;
+}
+
 export interface AdapterConfig {
   mode: AdapterMode;
   /** Starting off-chain balance for the mock ledger, in sats. Ignored by real adapters. */
   mockOpeningBalanceSats?: bigint;
   /** How long a mock payment stays `seen` before committing, in ms. */
   mockCommitLatencyMs?: number;
+  /** Required when mode === "tachi". */
+  tachi?: TachiAdapterConfig;
 }
 
 export class NotImplementedError extends Error {

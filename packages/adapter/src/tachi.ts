@@ -1,328 +1,345 @@
 /**
- * TachiRealAdapter — documentation-as-code scaffold for the real Tachi
- * settlement integration.
+ * TachiRealAdapter — real settlement against a Tachi daemon, written against
+ * the live responses recorded in docs/tachi-smoke-output.md.
  *
- * This file COMPILES WITHOUT the @tachibtc/* packages installed. It is written
- * for two audiences:
- *   1. The Tachi team, as a precise statement of what OpenTill needs from the
- *      SDK and exactly where the devnet is currently blocking us.
- *   2. Whoever wires the real integration once those questions are answered —
- *      each method already contains the step-by-step calls it will make.
+ * What is real (proven on regtest):
+ *  - receive addresses: fresh BIP-84 key per invoice, encoded as a P2TR address;
+ *  - detection: address-scoped VTXO queries (`getAddressVtxos`) + mempool
+ *    (`getMempoolByAddress`) mapped onto OpenTill's seen→committed model;
+ *  - refunds (`send`): a plain ledger TRANSFER, broadcast with `broadcastTxSync`
+ *    and accepted ONLY when `result.code === 0` AND the tx is seen committed;
+ *  - balances: off-chain = sum of ledger balances over our keys; on-chain =
+ *    L1 UTXOs at our taproot addresses via the daemon's Bitcoin RPC proxy.
  *
- * Nothing here runs today: `init()` throws immediately with a pointer to
- * INTEGRATION.md, and the factory only reaches this class when someone sets
- * ADAPTER_MODE=tachi. The method bodies are the integration spec.
- *
- * The local interfaces below MIRROR the documented @tachibtc/* surface per
- * docs.tachibtc.com as recorded in INTEGRATION.md. They are UNVERIFIED against
- * the real packages (the GitHub Packages token and package availability are
- * unconfirmed) — treat every signature as "as documented, subject to change".
+ * What is NOT implemented in real mode (honest boundary, see INTEGRATION.md):
+ *  - payouts to L1 (cooperative withdrawal / unilateral exit). Both need an
+ *    L1-funded, registered Taurus vault (createVault → depositToVault →
+ *    registerVault) plus the refund-cosign / exit PSBT flows; the ledger→L1
+ *    `TxWithdraw` type exists on the wire but the SDK ships no builder for it.
+ *    initiatePayout therefore returns a `failed` payout that says so.
  */
-
+import type { TachiClient } from "@tachibtc/tachi-sdk-ts";
+import { getAccountNonce, waitForTachiTxCommit } from "@tachibtc/taurus-vault-core";
+import { assertBroadcastOk, makeClient, TachiBroadcastError } from "./tachi/client";
+import { MerchantKeyring, type DerivedKey } from "./tachi/keys";
+import { StateStore } from "./tachi/state";
+import { buildSignedTransferHex, vtxoIdFor } from "./tachi/tx";
 import {
+  InsufficientFundsError,
   NotImplementedError,
-  type AdapterConfig,
   type AdapterPayout,
   type IncomingPayment,
   type PayoutKind,
   type TachiAdapter,
+  type TachiAdapterConfig,
 } from "./types";
 
-// ===========================================================================
-// Local mirror of the documented Tachi SDK surface (UNVERIFIED)
-// Mirrors @tachibtc/daemon-client and @tachibtc/vault-core per docs.tachibtc.com.
-// ===========================================================================
+export { TachiBroadcastError } from "./tachi/client";
+export { MerchantKeyring } from "./tachi/keys";
+export { buildSignedTransferHex, vtxoIdFor } from "./tachi/tx";
 
-/** A P2TR vault address plus the taproot tree that governs its exit. */
-interface TachiVault {
-  vaultId: string;
-  address: string;
-  /** Block height delta for the unilateral-exit timelock leaf. */
-  exitTimelockBlocks: number;
+/** Injectable seams so unit tests can run without a daemon. */
+export interface TachiRealAdapterDeps {
+  client?: TachiClient;
+  nonce?: (xOnly: Buffer) => Promise<bigint>;
+  waitCommit?: (hash: string) => Promise<{ committed: boolean; code: number; log: string }>;
+  now?: () => number;
 }
 
-/** A VTXO — an off-chain output spendable inside the vault, backed on-chain. */
-interface Vtxo {
-  vtxoId: string;
-  vaultId: string;
-  amountSats: bigint;
-  /** "pending" = seen but not co-signed; "committed" = quorum co-signed. */
-  state: "pending" | "committed" | "spent";
-  createdAt: number;
-}
+const BALANCE_CACHE_MS = 5_000;
+const L1_CACHE_MS = 60_000;
+const COMMIT_TIMEOUT_MS = 90_000;
 
-/** Mirrors @tachibtc/daemon-client — RPC to a local tachid instance. */
-interface TachiDaemonClient {
-  connect(): Promise<void>;
-  close(): Promise<void>;
-  /** Current chain tip; drives exit timelock countdowns. */
-  getBlockHeight(): Promise<number>;
-  /** Confirmed on-chain balance held by the daemon's wallet. */
-  getOnchainBalanceSats(): Promise<bigint>;
-  /** Broadcast a fully-signed transaction to the Bitcoin network. */
-  broadcastTx(txHex: string): Promise<{ txId: string }>;
-}
-
-/** Mirrors @tachibtc/vault-core — vault + VTXO construction/signing. */
-interface TachiVaultCore {
-  /** Create (or address-derive within) a vault. Needs the validator set. */
-  createVault(params: { validatorSet: ValidatorSetHandle }): Promise<TachiVault>;
-  /** Deposit on-chain funds into the vault, producing the initial VTXO set. */
-  depositToVault(params: { vaultId: string; amountSats: bigint }): Promise<Vtxo>;
-  /** Enumerate VTXOs currently credited to a vault address. */
-  listVtxos(params: { address: string; sinceCursor: string | null }): Promise<{
-    vtxos: Vtxo[];
-    nextCursor: string;
-  }>;
-  /** Build the PSBT that spends a VTXO out cooperatively (needs co-signers). */
-  buildVtxoPsbt(params: { fromVaultId: string; toAddress: string; amountSats: bigint }): Promise<Psbt>;
-  /** Local verification of a PSBT before we ask anyone to sign it. */
-  verifyVtxoPsbt(psbt: Psbt): Promise<{ ok: boolean; reason?: string }>;
-  /** Attach OUR signature to the PSBT. */
-  signVtxoPsbt(psbt: Psbt): Promise<Psbt>;
-  /** Combine all required signatures once the quorum has co-signed. */
-  finalizeVtxoPsbt(psbt: Psbt): Promise<{ txHex: string }>;
-  /** Build the unilateral-exit transaction from the vault's exit leaf. */
-  buildExitPsbt(params: { vaultId: string; toAddress: string }): Promise<Psbt>;
-  /** Resolve once a VTXO reaches the co-signed `committed` state. */
-  waitForVtxoCommit(vtxoId: string): Promise<Vtxo>;
-}
-
-/** Opaque PSBT handle in the mirrored surface. */
-interface Psbt {
-  base64: string;
-}
-
-/** Handle to the devnet validator set / KDHT. Acquisition is Q3 (blocked). */
-interface ValidatorSetHandle {
-  readonly quorumSize: number;
-}
-
-// The real module bindings would be:
-//   import { createDaemonClient } from "@tachibtc/daemon-client";
-//   import { createVaultCore } from "@tachibtc/vault-core";
-// They are intentionally NOT imported or installed here.
-
-// ===========================================================================
-// Blocking markers — the three open devnet questions
-// ===========================================================================
-
-export type BlockedQuestion =
-  | "Q1-cosign-trigger"
-  | "Q2-receiver-detection"
-  | "Q3-validator-access";
-
-/** Thrown at each step the devnet has not yet unblocked. */
-export class TachiIntegrationBlocked extends Error {
-  readonly questionId: BlockedQuestion;
-  constructor(questionId: BlockedQuestion, message: string) {
-    super(`[${questionId}] ${message} — see INTEGRATION.md`);
-    this.name = "TachiIntegrationBlocked";
-    this.questionId = questionId;
-  }
-}
-
-/** Documentation marker: this line is blocked on an open devnet question. */
-function BLOCKED(questionId: BlockedQuestion, message: string): never {
-  throw new TachiIntegrationBlocked(questionId, message);
-}
-
-// ===========================================================================
-// The adapter
-// ===========================================================================
-
-/**
- * Implements the same `TachiAdapter` contract the mock does, so the entire
- * gateway, poller, webhook, and test suite run against it unchanged once the
- * three blocked sections are filled in.
- */
 export class TachiRealAdapter implements TachiAdapter {
   readonly mode = "tachi" as const;
 
-  // These are the SDK handles the method walkthroughs assume. They stay null
-  // because init() throws before wiring them.
-  #daemon: TachiDaemonClient | null = null;
-  #vaultCore: TachiVaultCore | null = null;
-  #vault: TachiVault | null = null;
+  readonly #cfg: TachiAdapterConfig;
+  readonly #client: TachiClient;
+  readonly #nonce: (xOnly: Buffer) => Promise<bigint>;
+  readonly #waitCommit: (hash: string) => Promise<{ committed: boolean; code: number; log: string }>;
+  readonly #now: () => number;
+  readonly #log: (msg: string, meta?: Record<string, unknown>) => void;
 
-  constructor(private readonly config: AdapterConfig) {
-    void this.config;
+  #keyring: MerchantKeyring | null = null;
+  #state: StateStore | null = null;
+  #offchainCache: { at: number; value: bigint } | null = null;
+  #onchainCache: { at: number; value: bigint } | null = null;
+  #l1Warned = false;
+
+  constructor(cfg: TachiAdapterConfig, deps: TachiRealAdapterDeps = {}) {
+    if (!cfg?.mnemonic) throw new Error("TachiRealAdapter: tachi.mnemonic is required (TACHI_MNEMONIC)");
+    if (!cfg.rpcUrl) throw new Error("TachiRealAdapter: tachi.rpcUrl is required (TACHI_RPC_URL)");
+    this.#cfg = cfg;
+    this.#client = deps.client ?? makeClient(cfg.rpcUrl, cfg.apiKey);
+    this.#nonce = deps.nonce ?? ((xOnly) => getAccountNonce(xOnly, { baseUrl: cfg.rpcUrl }));
+    this.#waitCommit =
+      deps.waitCommit ??
+      (async (hash) => {
+        const st = await waitForTachiTxCommit(hash, { baseUrl: cfg.rpcUrl, overallTimeoutMs: COMMIT_TIMEOUT_MS });
+        return { committed: st.committed, code: st.code, log: st.log };
+      });
+    this.#now = deps.now ?? (() => Date.now());
+    this.#log = cfg.log ?? (() => {});
   }
 
-  /**
-   * Real init would: create the daemon client, connect(), create/derive the
-   * merchant vault. It refuses to run today — ADAPTER_MODE=tachi is a spec,
-   * not a live path.
-   */
+  // ---- lifecycle ------------------------------------------------------------
+
   async init(): Promise<void> {
-    // Connects to Tachi's HOSTED regtest/Signet RPC (not a local bitcoind — a
-    // local regtest chain will not work against their private node):
-    // const { createDaemonClient } = await import("@tachibtc/daemon-client");
-    // const { createVaultCore } = await import("@tachibtc/vault-core");
-    // this.#daemon = createDaemonClient({ url: hostedRpcUrl /* ... */ });
-    // await this.#daemon.connect();
-    // this.#vaultCore = createVaultCore({ daemon: this.#daemon });
-    // this.#vault = await this.#vaultCore.createVault({ validatorSet });  // ← Q3 endpoint pending
-    throw new NotImplementedError(
-      "ADAPTER_MODE=tachi is a documented integration scaffold, not a live adapter. " +
-        "As of 2026-07-22: co-signing is answered (node co-signs on broadcast); vault " +
-        "creation runs against Tachi's hosted node; receiver-side VTXO detection is still " +
-        "open. It waits on Tachi's published RPC endpoints. See INTEGRATION.md for the " +
-        "method-by-method mapping and the swap-in plan. Run with ADAPTER_MODE=mock.",
-    );
-  }
+    this.#keyring = await MerchantKeyring.fromMnemonic(this.#cfg.mnemonic, this.#cfg.network);
+    this.#state = new StateStore(this.#cfg.statePath, this.#cfg.network);
 
-  /**
-   * Derive a fresh receive address inside the merchant vault.
-   *
-   * Steps: ensure a vault exists (init), then derive/allocate a receive
-   * address under it. Q3 is PARTIALLY ANSWERED — there is no local validator
-   * set to obtain; the vault is created against Tachi's HOSTED regtest/Signet
-   * node. The concrete createVault endpoint is pending Tachi's Swagger.
-   */
-  async createReceiveAddress(_ref: string): Promise<{ address: string }> {
-    // A vault is created against the hosted node (not a local validator set):
-    //   const vault = await this.#vaultCore!.createVault({ validatorSet });
-    //   return { address: vault.address };
-    return BLOCKED(
-      "Q3-validator-access",
-      "vault creation runs against Tachi's hosted node (no local validator set); " +
-        "the createVault endpoint is pending Tachi Swagger",
-    );
-  }
-
-  /**
-   * Poll for incoming VTXOs to watched vault addresses and report each as a
-   * payment, mapping VTXO state → our seen/committed model:
-   *   pending   → "seen"       (arrived, not yet co-signed)
-   *   committed → "committed"  (quorum co-signed; safe to confirm the invoice)
-   *
-   * Detecting the incoming VTXO in the first place is the blocked step (Q2).
-   * Once detection works, the pending→committed transition follows for free:
-   * Q1 is answered — the node co-signs on broadcast — so a VTXO's committed
-   * state is observable via `waitForVtxoCommit` with no quorum round to drive.
-   */
-  async pollIncoming(
-    _cursor: string | null,
-  ): Promise<{ payments: IncomingPayment[]; nextCursor: string }> {
-    // const { vtxos, nextCursor } = await this.#vaultCore!.listVtxos({
-    //   address: watchedAddress,
-    //   sinceCursor: _cursor,
-    // });
-    // const payments = vtxos.map((v) => ({
-    //   paymentId: v.vtxoId,
-    //   toAddress: this.#vault!.address,
-    //   amountSats: v.amountSats,
-    //   observedAt: v.createdAt,
-    //   status: v.state === "committed" ? "committed" : "seen",
-    // }));
-    // return { payments, nextCursor };
-    return BLOCKED(
-      "Q2-receiver-detection",
-      "no documented receiver-side path to detect an incoming VTXO to a vault " +
-        "address we control; docs cover sending, not receiving",
-    );
-  }
-
-  async watchAddress(_address: string): Promise<void> {
-    // Register the address with the daemon's VTXO subscription so listVtxos /
-    // a push feed surfaces payments to it. Implementable once Q2 is answered.
-    throw new NotImplementedError("watchAddress: implement alongside pollIncoming (Q2).");
-  }
-
-  async unwatchAddress(_address: string): Promise<void> {
-    throw new NotImplementedError("unwatchAddress: implement alongside pollIncoming (Q2).");
-  }
-
-  /**
-   * Send sats out for a refund. This is a cooperative spend of committed
-   * VTXOs, so it walks the same build → verify → sign → broadcast path as a
-   * cooperative payout. Q1 is ANSWERED — the node co-signs on broadcast — so
-   * this is specification-complete; it waits only on the published broadcast
-   * endpoint. Not separately BLOCKED — see initiatePayout's cooperative branch
-   * for the single Q1 marker.
-   */
-  async send(_params: {
-    toAddress: string;
-    amountSats: bigint;
-    ref: string;
-  }): Promise<{ txId: string }> {
-    // const psbt = await this.#vaultCore!.buildVtxoPsbt({ ... });
-    // await this.#vaultCore!.verifyVtxoPsbt(psbt);
-    // const mine = await this.#vaultCore!.signVtxoPsbt(psbt);
-    // return this.#daemon!.broadcastTx(mine.base64); // node co-signs on broadcast (Q1)
-    throw new NotImplementedError(
-      "send (refund): cooperative spend; Q1 answered (node co-signs on broadcast), " +
-        "pending the published broadcast endpoint. See INTEGRATION.md.",
-    );
-  }
-
-  async getBalance(): Promise<{ offchainSats: bigint; onchainSats: bigint }> {
-    // offchain = sum of committed VTXO amounts in the vault;
-    // onchain  = this.#daemon!.getOnchainBalanceSats().
-    throw new NotImplementedError(
-      "getBalance: sum committed VTXOs (needs Q2 detection) + daemon on-chain balance.",
-    );
-  }
-
-  /**
-   * Start a withdrawal to on-chain Bitcoin.
-   *
-   * - cooperative: build the spend PSBT, sign our part, and broadcast — the
-   *   node co-signs automatically on broadcast (Q1 answered). The remaining
-   *   blocker is the published broadcast endpoint, not the mechanism.
-   * - exit: broadcast the vault's exit leaf unilaterally — no quorum, just a
-   *   timelock. Fully implementable once a vault exists (Q3); no co-sign
-   *   needed, which is the whole point of the exit path.
-   */
-  async initiatePayout(params: {
-    kind: PayoutKind;
-    toAddress: string;
-    amountSats?: bigint;
-  }): Promise<AdapterPayout> {
-    if (params.kind === "cooperative") {
-      // Q1 ANSWERED (2026-07-22): the Tachi node co-signs automatically on
-      // broadcast — there is no quorum round to drive and no separate signing
-      // endpoint. We build, sign our part, and broadcast; the node co-signs as
-      // it accepts the broadcast.
-      // const psbt = await this.#vaultCore!.buildVtxoPsbt({
-      //   fromVaultId: this.#vault!.vaultId,
-      //   toAddress: params.toAddress,
-      //   amountSats: params.amountSats!,
-      // });
-      // const mine = await this.#vaultCore!.signVtxoPsbt(psbt);
-      // const { txId } = await this.#daemon!.broadcastTx(mine.base64); // node co-signs on broadcast
-      return BLOCKED(
-        "Q1-cosign-trigger",
-        "co-signing is ANSWERED (the node co-signs automatically on broadcast); " +
-          "remaining blocker is the published broadcast RPC endpoint, pending Tachi Swagger",
-      );
+    // The "till" key (receive chain, index 0): the merchant's float. Refunds
+    // are paid from whichever key can cover amount + fee; a funded till key
+    // keeps refunds working even when an invoice key holds exactly its amount.
+    const till = this.#keyring.derive(0, false);
+    if (!this.#state.findByAddress(till.address)) {
+      this.#state.update((s) => s.keys.unshift(till));
     }
 
-    // Unilateral exit — the sovereignty path. Implementable without any
-    // validator once the vault exists:
-    //   const psbt = await this.#vaultCore!.buildExitPsbt({
-    //     vaultId: this.#vault!.vaultId, toAddress: params.toAddress });
-    //   const signed = await this.#vaultCore!.signVtxoPsbt(psbt);
-    //   const { txHex } = await this.#vaultCore!.finalizeVtxoPsbt(signed);
-    //   const { txId } = await this.#daemon!.broadcastTx(txHex);
-    //   // then track timelockBlocksRemaining via getBlockHeight() until spendable.
-    throw new NotImplementedError(
-      "initiatePayout(exit): implementable once a vault exists (Q3); broadcasts the " +
-        "exit leaf with no co-signers. See INTEGRATION.md.",
-    );
-  }
-
-  async pollPayouts(): Promise<AdapterPayout[]> {
-    // For cooperative payouts: poll the broadcast tx to confirmation.
-    // For exits: recompute timelockBlocksRemaining from getBlockHeight() and
-    // flip to "settled" once the exit output is spendable and swept on-chain.
-    throw new NotImplementedError(
-      "pollPayouts: track cooperative tx confirmation + exit timelock via daemon block height.",
-    );
+    const health = await this.#client.getHealth();
+    const status = await this.#client.getStatus();
+    const chainId = String((status as any)?.result?.node_info?.network ?? "");
+    const height = Number((status as any)?.result?.sync_info?.latest_block_height ?? NaN);
+    const catchingUp = Boolean((status as any)?.result?.sync_info?.catching_up);
+    if (!chainId.startsWith(`tachi-${this.#cfg.network}`)) {
+      throw new Error(
+        `TACHI_NETWORK=${this.#cfg.network} but the daemon at ${this.#cfg.rpcUrl} reports chain "${chainId}" — refusing to boot`,
+      );
+    }
+    this.#log("tachi: connected", {
+      rpcUrl: this.#cfg.rpcUrl,
+      chainId,
+      height,
+      catchingUp,
+      validators: health.validators,
+      tillAddress: till.address,
+      keys: this.#state.state.keys.length,
+      watched: this.#state.state.watched.length,
+      statePath: this.#cfg.statePath,
+    });
   }
 
   async close(): Promise<void> {
-    await this.#daemon?.close();
+    /* stateless HTTP client; nothing to release */
   }
+
+  // ---- receiving -----------------------------------------------------------
+
+  async createReceiveAddress(_ref: string): Promise<{ address: string }> {
+    const { keyring, state } = this.#ready();
+    const index = state.state.nextInvoiceIndex;
+    const key = keyring.derive(index, true); // change chain = invoice keys
+    state.update((s) => {
+      s.nextInvoiceIndex = index + 1;
+      s.keys.push(key);
+    });
+    return { address: key.address };
+  }
+
+  async watchAddress(address: string): Promise<void> {
+    const { state } = this.#ready();
+    if (!state.findByAddress(address)) throw new Error(`watchAddress: ${address} is not one of our keys`);
+    state.update((s) => {
+      if (!s.watched.includes(address)) s.watched.push(address);
+    });
+  }
+
+  async unwatchAddress(address: string): Promise<void> {
+    const { state } = this.#ready();
+    state.update((s) => {
+      s.watched = s.watched.filter((a) => a !== address);
+    });
+  }
+
+  /**
+   * Cursor = a ledger height watermark. Committed VTXOs are reported when their
+   * commit height is above the cursor; pending mempool credits are reported as
+   * `seen` every tick until they commit (the gateway is idempotent on
+   * (paymentId, status)). The next cursor is the daemon height read at the START
+   * of the tick minus one, so a block committing mid-tick can never be skipped.
+   */
+  async pollIncoming(cursor: string | null): Promise<{ payments: IncomingPayment[]; nextCursor: string }> {
+    const { state } = this.#ready();
+    const from = parseCursor(cursor);
+    const status = await this.#client.getStatus();
+    const h0 = Number((status as any)?.result?.sync_info?.latest_block_height ?? NaN);
+    const now = this.#now();
+    const payments: IncomingPayment[] = [];
+
+    for (const address of state.state.watched) {
+      const key = state.findByAddress(address);
+      if (!key) continue;
+
+      const mempool = await this.#client.getMempoolByAddress(address);
+      for (const tx of mempool.transactions ?? []) {
+        tx.vout.forEach((out, i) => {
+          if (out.owner.toLowerCase() !== key.xOnlyHex) return;
+          payments.push({
+            paymentId: vtxoIdFor(tx.tx_hash, i),
+            toAddress: address,
+            amountSats: BigInt(out.amount),
+            observedAt: now,
+            status: "seen",
+          });
+        });
+      }
+
+      const committed = await this.#client.getAddressVtxos(address, true);
+      for (const v of committed.vtxos) {
+        if (v.height <= from) continue;
+        payments.push({
+          paymentId: v.id,
+          toAddress: address,
+          amountSats: BigInt(v.amount),
+          observedAt: now,
+          status: "committed",
+        });
+      }
+    }
+
+    const nextCursor = Number.isFinite(h0) ? Math.max(from, h0 - 1) : from;
+    return { payments, nextCursor: String(nextCursor) };
+  }
+
+  // ---- sending (refunds) ---------------------------------------------------
+
+  async send(params: { toAddress: string; amountSats: bigint; ref: string }): Promise<{ txId: string }> {
+    const { keyring, state } = this.#ready();
+    if (params.amountSats <= 0n) throw new RangeError("send amount must be positive");
+    const owner = keyring.ownerFromAddress(params.toAddress);
+    const fee = await this.#feeSats();
+    const need = params.amountSats + fee;
+
+    // One TachiTx has one signer, so pick a single key that can cover amount+fee
+    // (smallest sufficient balance first — leaves the float intact when possible).
+    const funded: Array<{ key: DerivedKey; vtxos: Array<{ id: string; amount: number }>; total: bigint }> = [];
+    for (const key of state.state.keys) {
+      const res = await this.#client.getAddressVtxos(key.address, false);
+      const spendable = res.vtxos.filter((v) => !v.spent && !v.locked);
+      const total = spendable.reduce((a, v) => a + BigInt(v.amount), 0n);
+      if (total > 0n) funded.push({ key, vtxos: spendable.map((v) => ({ id: v.id, amount: v.amount })), total });
+    }
+    const pick = funded.filter((f) => f.total >= need).sort((a, b) => (a.total < b.total ? -1 : 1))[0];
+    if (!pick) {
+      const grand = funded.reduce((a, f) => a + f.total, 0n);
+      throw new InsufficientFundsError(
+        `no single key can cover ${params.amountSats} + fee ${fee} sats (largest key ${funded.map((f) => f.total).sort((a, b) => (a < b ? 1 : -1))[0] ?? 0n}, total ${grand} across ${funded.length} keys) — fund the till key`,
+      );
+    }
+
+    // Largest-first input selection within the chosen key.
+    const inputs: Array<{ vtxoId: string; valueSats: bigint }> = [];
+    let inSum = 0n;
+    for (const v of [...pick.vtxos].sort((a, b) => b.amount - a.amount)) {
+      inputs.push({ vtxoId: v.id, valueSats: BigInt(v.amount) });
+      inSum += BigInt(v.amount);
+      if (inSum >= need) break;
+    }
+    const change = inSum - need;
+    const outputs = [{ owner, amountSats: params.amountSats }];
+    if (change > 0n) outputs.push({ owner: Buffer.from(pick.key.xOnlyHex, "hex"), amountSats: change });
+
+    const nonce = await this.#nonce(Buffer.from(pick.key.xOnlyHex, "hex"));
+    const hex = await buildSignedTransferHex({
+      signer: keyring.signer(pick.key),
+      spenderXOnly: Buffer.from(pick.key.xOnlyHex, "hex"),
+      inputs,
+      outputs,
+      feeSats: fee,
+      nonce,
+    });
+
+    // A resolved promise is NOT success: read the CometBFT verdict, then wait
+    // for the block commit — a mempool accept can still be dropped later.
+    const verdict = assertBroadcastOk(await this.#client.broadcastTxSync(hex));
+    const commit = await this.#waitCommit(verdict.hash);
+    if (!commit.committed) throw new TachiBroadcastError(commit.code, commit.log || "not committed");
+
+    this.#offchainCache = null;
+    this.#log("tachi: transfer committed", { txId: verdict.hash, from: pick.key.address, to: params.toAddress, amountSats: params.amountSats.toString(), fee: fee.toString(), ref: params.ref });
+    return { txId: verdict.hash };
+  }
+
+  // ---- balances ------------------------------------------------------------
+
+  async getBalance(): Promise<{ offchainSats: bigint; onchainSats: bigint }> {
+    const { state } = this.#ready();
+    const now = this.#now();
+
+    if (!this.#offchainCache || now - this.#offchainCache.at > BALANCE_CACHE_MS) {
+      let sum = 0n;
+      for (const key of state.state.keys) {
+        const b = await this.#client.getBalance(key.address);
+        sum += BigInt(b.balance_sat);
+      }
+      this.#offchainCache = { at: now, value: sum };
+    }
+
+    if (!this.#onchainCache || now - this.#onchainCache.at > L1_CACHE_MS) {
+      let sats = 0n;
+      try {
+        const descriptors = state.state.keys.map((k) => `addr(${k.address})`);
+        const r = await this.#client.bitcoinRPC({ method: "scantxoutset", params: ["start", descriptors] });
+        if (r.error) throw new Error(`${r.error.code} ${r.error.message}`);
+        const total = (r.result as { total_amount?: number })?.total_amount ?? 0;
+        sats = BigInt(Math.round(total * 1e8));
+      } catch (err) {
+        if (!this.#l1Warned) {
+          this.#l1Warned = true;
+          this.#log("tachi: on-chain balance unavailable (scantxoutset via proxy)", { error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      this.#onchainCache = { at: now, value: sats };
+    }
+
+    return { offchainSats: this.#offchainCache.value, onchainSats: this.#onchainCache.value };
+  }
+
+  // ---- payouts (not implemented in real mode) --------------------------------
+
+  async initiatePayout(params: { kind: PayoutKind; toAddress: string; amountSats?: bigint }): Promise<AdapterPayout> {
+    const why =
+      params.kind === "exit"
+        ? "unilateral exit needs an L1-funded, registered Taurus vault (buildUnilateralExitPsbt spends the vault's exit leaf); this deployment holds ledger VTXOs, not a vault"
+        : "cooperative withdrawal to L1 needs a registered Taurus vault + the refund co-sign flow (or the wire-level TxWithdraw, for which the SDK ships no builder)";
+    return {
+      payoutId: `unimpl_${this.#now().toString(36)}`,
+      kind: params.kind,
+      toAddress: params.toAddress,
+      amountSats: params.amountSats ?? 0n,
+      status: "failed",
+      error: `not implemented in real (tachi) mode: ${why} — see INTEGRATION.md`,
+    };
+  }
+
+  async pollPayouts(): Promise<AdapterPayout[]> {
+    return [];
+  }
+
+  /** Exposed for scripts/tests: the adapter's keys (public material only). */
+  keys(): readonly DerivedKey[] {
+    return this.#ready().state.state.keys;
+  }
+
+  // ---- internals ------------------------------------------------------------
+
+  #ready(): { keyring: MerchantKeyring; state: StateStore } {
+    if (!this.#keyring || !this.#state) throw new NotImplementedError("TachiRealAdapter.init() must be awaited before use");
+    return { keyring: this.#keyring, state: this.#state };
+  }
+
+  async #feeSats(): Promise<bigint> {
+    try {
+      const est = await this.#client.getFeeEstimate();
+      return BigInt(Math.max(1, est.recommended_fee_sat || est.min_fee_sat || 1));
+    } catch {
+      return 1n;
+    }
+  }
+}
+
+function parseCursor(cursor: string | null): number {
+  if (!cursor) return 0;
+  const n = Number.parseInt(cursor, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }

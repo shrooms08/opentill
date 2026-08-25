@@ -13,12 +13,12 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
  your backend ──▶│  /api/*        invoices · refunds · stats · payouts  (Bearer API key)         │
                  │                                                                               │
                  │   Fastify ── SQLite (WAL) ── pollers ──▶ TachiAdapter ──▶ Tachi network       │
-                 │      │                                    (mock today)    (vaults / VTXOs)    │
+                 │      │                                   (mock | tachi)   (ledger VTXOs)     │
                  │      └──▶ HMAC-signed webhooks ──▶ your store (WooCommerce plugin, any HTTP)  │
                  └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Status:** engine, UIs, deployment, and integrations are complete and tested (184 tests). The settlement layer ships in **clearly-labeled mock mode** (`ADAPTER_MODE=mock`) — no real Bitcoin moves — because three Tachi devnet questions still block the live adapter. Mock mode is surfaced honestly everywhere (dashboard footer bar, `/healthz`), and the adapter interface is positioned as the integration spec: see **[INTEGRATION.md](INTEGRATION.md)**. Everything above the settlement boundary is real.
+**Status:** engine, UIs, deployment, and integrations are complete and tested (195 tests). Settlement has **two adapters behind one interface**: `ADAPTER_MODE=mock` (the test/demo/CI adapter — no real Bitcoin moves, labeled as such in the dashboard) and `ADAPTER_MODE=tachi` — **real settlement on the Tachi ledger, proven end to end on regtest**: per-invoice addresses, live payment detection, `confirmed`, and refunds, with real transaction ids in [INTEGRATION.md](INTEGRATION.md). L1 payouts (cooperative withdrawal / unilateral exit) are not implemented in real mode yet — see Limitations.
 
 ## Bounty #11 (Merchant Payments) — requirements
 
@@ -29,7 +29,7 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 | **Dashboard w/ transactions + refunds** | `/dashboard` — overview, invoices table + detail slide-over, refund flow. | Test suite `gate3.test.ts` (stats, listing) + `dashboard-views.test.tsx`; screen `02-dashboard-overview`. |
 | **Self-hosted / open-source deployment** | One MIT-licensed container; `docker compose up`, or Fly.io (`fly deploy`), or `npm run dev`. | `Dockerfile`, `docker-compose.yml`, `fly.toml`; command `docker compose up --build`. |
 | **E-commerce plugin** | WooCommerce payment gateway (`plugins/opentill-for-woocommerce/`) + a from-scratch demo store. | Plugin `php -l` clean; integration test `demo store round trip`; screen `05-demo-store`. |
-| **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
+| **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission) — full lifecycle in mock mode; **not yet in real mode** (needs a Taurus vault, see INTEGRATION.md §5). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
 
 Screenshots live in [`docs/screenshots/`](docs/screenshots/). Demo video: **_(link to be added)_**.
 
@@ -57,7 +57,7 @@ Requires Node 20+.
 ```bash
 npm install
 cp .env.example .env          # then edit the two secrets
-npm test                      # 184 tests
+npm test                      # 195 tests
 npm run build                 # builds checkout + dashboard into apps/web/dist
 npm run dev                   # gateway on :8080
 ```
@@ -76,6 +76,37 @@ node examples/demo-store/server.mjs      # Satoshi Beans on :4000
 
 [`plugins/opentill-for-woocommerce/`](plugins/opentill-for-woocommerce/) is a two-file plugin: install it, point it at your gateway URL + API key + webhook secret, and "Bitcoin (OpenTill)" appears as a payment method — invoice per order, hosted checkout redirect, order completion via signed webhook, "Return to store" back to order-received. `npm run build:plugin` produces the uploadable zip. Details and limitations (fixed sats-per-unit conversion) in [its README](plugins/opentill-for-woocommerce/README.md).
 
+## Settlement modes
+
+| | `ADAPTER_MODE=mock` (default) | `ADAPTER_MODE=tachi` |
+| --- | --- | --- |
+| What it is | In-memory settlement; the test/demo/CI adapter | The real Tachi daemon (`TACHI_RPC_URL`, regtest by default; signet supported, untested) |
+| Invoices / addresses | `mock1p…` | one fresh BIP-84 key per invoice, encoded as a P2TR address (`bcrt1p…`) |
+| Detection | simulated (`/dev/simulate-payment`, checkout dev button) | `getMempoolByAddress` → `seen`, `getAddressVtxos` → `committed`, 2 s poll, crash-safe height cursor |
+| Refunds | simulated | real ledger transfer: `broadcastTxSync`, accepted only on `code === 0` **and** block commit |
+| Balances | simulated | Σ ledger balances over the merchant's keys + L1 UTXOs via the daemon's Bitcoin RPC proxy |
+| Payouts / exit | full mock lifecycle (the intended UX) | **not implemented** — returns a `failed` payout with the reason |
+| Needs network | no | yes; Node ≥ 22 |
+
+Run real mode:
+
+```bash
+node -e "console.log(require('bip39').generateMnemonic())"   # regtest test coins only
+# .env
+ADAPTER_MODE=tachi
+TACHI_MNEMONIC="…"
+TACHI_NETWORK=regtest        # TACHI_RPC_URL defaults to https://rpc-regtest.tachibtc.com
+npm run dev                  # boot log: tachi: connected {chainId, height, tillAddress}
+```
+
+Fund the **till** key once (its address is in the boot log; refunds are paid from it) with a ledger
+transfer from any Tachi wallet. Note the public faucet pays **L1** coins, which do not credit the ledger;
+on regtest the daemon also accepts a self-signed ledger `deposit` (fee ≥ 1 sat — that is how the smoke
+script funds its keys), a convenience we do not assume exists on signet/mainnet. The mock is untouched by
+any of this: `npm test` never touches the network. `npm run smoke:tachi` records the daemon's real
+response shapes ([docs/tachi-smoke-output.md](docs/tachi-smoke-output.md)); `npm run e2e:tachi` runs the
+full invoice → pay → confirm → refund loop through the gateway ([docs/tachi-e2e-output.md](docs/tachi-e2e-output.md)).
+
 ## Security notes
 
 - **One API key** (`OPENTILL_API_KEY`, Bearer, constant-time compared) guards every merchant route; the dashboard keeps it in sessionStorage only. Public checkout routes carry no auth by design — the 128-bit-random invoice id is the capability; treat checkout links like password-reset links.
@@ -86,7 +117,7 @@ node examples/demo-store/server.mjs      # Satoshi Beans on :4000
 
 Plainly, so there are no surprises:
 
-- **Mock settlement.** No real Bitcoin moves. `ADAPTER_MODE=mock` simulates the Tachi settlement layer deterministically; the dashboard shows a persistent "Mock settlement mode" footer and `/healthz` reports `adapterMode: "mock"`. The real adapter is a scaffold; as of 2026-07-22 Tachi has answered co-signing (the node co-signs on broadcast, so the whole send path is spec-complete) and clarified vault creation runs against their hosted node — leaving receiver-side payment detection as the one open design question, everything else waiting on published endpoints (target 2026-08-15). Full mapping and swap-in plan in **[INTEGRATION.md](INTEGRATION.md)**; `ADAPTER_MODE=tachi` refuses to boot with a pointer to it.
+- **Real settlement covers receiving, not L1 payouts.** `ADAPTER_MODE=tachi` is live on Tachi regtest for invoices, detection, confirmation and refunds (e2e: payment `d8fb214e…146f`, refund `698e3128…bf71`). Cooperative withdrawal and unilateral exit are **not** implemented in real mode — they need a registered Taurus vault funded from an L1 P2WPKH wallet (or a documented `TxWithdraw`); the adapter returns a `failed` payout that says so. `ADAPTER_MODE=mock` still demonstrates the full payout/exit UX. Details, real ids, and the open question to Tachi: **[INTEGRATION.md](INTEGRATION.md)**.
 - **WooCommerce sats conversion is a fixed rate.** The plugin converts order totals to sats via a merchant-set "sats per currency unit" number — no live BTC/fiat feed. Price products in sats (rate = 1) or pin a rate you manage. See the [plugin README](plugins/opentill-for-woocommerce/README.md).
 - **Single-merchant auth.** One API key, one merchant, one storefront (`OPENTILL_MERCHANT_NAME`). No multi-tenant accounts — that is deliberate for a self-hosted tool.
 
@@ -344,7 +375,12 @@ Any non-2xx or transport error is retried by an interval sweep with backoff **5s
 | `OPENTILL_API_KEY` | yes | — | Bearer token for all `/api/*` routes. Compared in constant time. |
 | `OPENTILL_WEBHOOK_SECRET` | yes | — | HMAC-SHA256 key for `X-OpenTill-Signature`. |
 | `OPENTILL_DB_PATH` | no | `./opentill.db` | SQLite file. Parent directories are created on boot. |
-| `ADAPTER_MODE` | no | `mock` | `mock` or `tachi`. `tachi` constructs the real-adapter scaffold whose `init()` refuses to boot with a pointer to [INTEGRATION.md](INTEGRATION.md). |
+| `ADAPTER_MODE` | no | `mock` | `mock` (in-memory, demo/CI) or `tachi` (real Tachi daemon; requires `TACHI_MNEMONIC`). See Settlement modes. |
+| `TACHI_MNEMONIC` | tachi only | — | BIP-39 mnemonic every merchant key derives from (till = `m/84'/…/0/0`, invoices on the change chain). |
+| `TACHI_NETWORK` | no | `regtest` | `regtest` or `signet`; boot refuses a daemon on another chain. |
+| `TACHI_RPC_URL` | no | `https://rpc-regtest.tachibtc.com` | Tachi daemon RPC base URL. |
+| `TACHI_API_KEY` | no | — | Optional daemon `X-Api-Key`. |
+| `TACHI_STATE_PATH` | no | `<db dir>/tachi-adapter.json` | Handed-out keys + watched addresses (re-derivable index, back up with the DB). |
 | `OPENTILL_MERCHANT_NAME` | no | `OpenTill` | Storefront name shown to customers in the checkout header and POS. |
 | `PORT` | no | `8080` | HTTP port. |
 | `HOST` | no | `0.0.0.0` | Bind address. |

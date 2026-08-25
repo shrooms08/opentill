@@ -43,7 +43,16 @@ export interface App {
  * started here so tests can drive `poller.tick()` deterministically.
  */
 export async function createApp(config: GatewayConfig, overrides: AppOverrides = {}): Promise<App> {
-  const adapter = overrides.adapter ?? createAdapter({ mode: config.adapterMode });
+  const app = Fastify({ logger: overrides.logger ?? false });
+
+  const adapter =
+    overrides.adapter ??
+    createAdapter({
+      mode: config.adapterMode,
+      ...(config.tachi
+        ? { tachi: { ...config.tachi, log: (msg, meta) => app.log.info(meta ?? {}, msg) } }
+        : {}),
+    });
   if (config.devPublicSimulate && !(adapter instanceof MockTachiAdapter)) {
     throw new Error(
       "OPENTILL_DEV_PUBLIC_SIMULATE=true requires the mock adapter — refusing to boot",
@@ -53,8 +62,6 @@ export async function createApp(config: GatewayConfig, overrides: AppOverrides =
 
   const db = overrides.db ?? openDb(config.dbPath);
   const repo = new Repo(db);
-
-  const app = Fastify({ logger: overrides.logger ?? false });
 
   const webhooks = new WebhookDispatcher({
     repo,

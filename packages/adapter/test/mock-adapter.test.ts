@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createAdapter,
-  MockTachiAdapter,
-  NotImplementedError,
-  TachiRealAdapter,
-} from "@opentill/adapter";
+import { createAdapter, MockTachiAdapter, TachiRealAdapter } from "@opentill/adapter";
 
 async function freshAdapter(commitLatencyMs = 20): Promise<MockTachiAdapter> {
   const adapter = new MockTachiAdapter({ mockCommitLatencyMs: commitLatencyMs });
@@ -19,14 +14,18 @@ describe("createAdapter", () => {
     expect(createAdapter({ mode: "mock" })).toBeInstanceOf(MockTachiAdapter);
   });
 
-  it("constructs the tachi scaffold, but init() refuses with an INTEGRATION.md pointer", async () => {
-    // Gate 7: `tachi` mode now constructs the real-adapter scaffold (it is the
-    // integration spec) rather than throwing at construction; the refusal
-    // moved to init() so the failure names the swap-in doc.
-    const adapter = createAdapter({ mode: "tachi" });
-    expect(adapter).toBeInstanceOf(TachiRealAdapter);
-    await expect(adapter.init()).rejects.toThrow(NotImplementedError);
-    await expect(adapter.init()).rejects.toThrow(/INTEGRATION\.md/);
+  it("tachi mode needs tachi settings; with them it constructs the real adapter", () => {
+    expect(() => createAdapter({ mode: "tachi" })).toThrow(/TACHI_MNEMONIC/);
+    const real = createAdapter({
+      mode: "tachi",
+      tachi: {
+        rpcUrl: "https://rpc-regtest.tachibtc.com",
+        network: "regtest",
+        mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        statePath: "/tmp/opentill-unused-state.json",
+      },
+    });
+    expect(real).toBeInstanceOf(TachiRealAdapter);
   });
 });
 

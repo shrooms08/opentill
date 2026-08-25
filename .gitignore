@@ -9,3 +9,6 @@ dist/
 *.log
 .DS_Store
 coverage/
+
+# Tachi regtest smoke/e2e key material (test coins only)
+.tachi-smoke-state.json

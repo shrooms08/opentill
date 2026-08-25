@@ -5,7 +5,8 @@ import {
   DEFAULT_SSE_HEARTBEAT_MS,
   DEFAULT_WEBHOOK_SWEEP_INTERVAL_MS,
 } from "@opentill/shared";
-import type { AdapterMode } from "@opentill/adapter";
+import type { AdapterMode, TachiAdapterConfig } from "@opentill/adapter";
+import { dirname, join } from "node:path";
 
 /** Production build output of apps/web, served by @fastify/static. */
 const DEFAULT_WEB_DIST = fileURLToPath(new URL("../../../apps/web/dist", import.meta.url));
@@ -38,7 +39,11 @@ export interface GatewayConfig {
   webDistPath: string;
   /** Storefront name shown to customers in the checkout header. */
   merchantName: string;
+  /** Real-settlement settings; null unless ADAPTER_MODE=tachi. */
+  tachi: Omit<TachiAdapterConfig, "log"> | null;
 }
+
+export const DEFAULT_TACHI_RPC_URL = "https://rpc-regtest.tachibtc.com";
 
 function intFromEnv(env: NodeJS.ProcessEnv, key: string, fallback: number): number {
   const raw = env[key];
@@ -76,10 +81,33 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     );
   }
 
+  const dbPath = env.OPENTILL_DB_PATH ?? "./opentill.db";
+
+  let tachi: GatewayConfig["tachi"] = null;
+  if (adapterMode === "tachi") {
+    const mnemonic = env.TACHI_MNEMONIC?.trim();
+    if (!mnemonic) {
+      throw new Error(
+        "ADAPTER_MODE=tachi requires TACHI_MNEMONIC (BIP-39; every merchant key derives from it) — see README",
+      );
+    }
+    const network = env.TACHI_NETWORK ?? "regtest";
+    if (network !== "regtest" && network !== "signet") {
+      throw new Error(`TACHI_NETWORK must be "regtest" or "signet", got ${JSON.stringify(network)}`);
+    }
+    tachi = {
+      rpcUrl: env.TACHI_RPC_URL || DEFAULT_TACHI_RPC_URL,
+      network,
+      mnemonic,
+      statePath: env.TACHI_STATE_PATH || join(dirname(dbPath), "tachi-adapter.json"),
+      ...(env.TACHI_API_KEY ? { apiKey: env.TACHI_API_KEY } : {}),
+    };
+  }
+
   return {
     apiKey,
     webhookSecret,
-    dbPath: env.OPENTILL_DB_PATH ?? "./opentill.db",
+    dbPath,
     adapterMode,
     port: intFromEnv(env, "PORT", 8080),
     host: env.HOST ?? "0.0.0.0",
@@ -102,5 +130,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     payoutPollIntervalMs: intFromEnv(env, "PAYOUT_POLL_INTERVAL_MS", DEFAULT_POLL_INTERVAL_MS),
     webDistPath: env.OPENTILL_WEB_DIST ?? DEFAULT_WEB_DIST,
     merchantName: env.OPENTILL_MERCHANT_NAME?.trim() || "OpenTill",
+    tachi,
   };
 }

@@ -17,10 +17,16 @@
     "build": "npm run build -w @opentill/web",
     "dev": "npm run dev -w @opentill/gateway",
     "dev:web": "npm run dev -w @opentill/web",
-    "build:plugin": "sh scripts/build-plugin-zip.sh"
+    "build:plugin": "sh scripts/build-plugin-zip.sh",
+    "smoke:tachi": "tsx scripts/tachi-smoke.ts",
+    "e2e:tachi": "tsx scripts/tachi-e2e.ts"
   },
   "devDependencies": {
+    "@bitcoinerlab/secp256k1": "^1.2.0",
     "@types/node": "^22.10.2",
+    "bip32": "^5.0.1",
+    "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^7.0.1",
     "sharp": "^0.35.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
