@@ -111,49 +111,73 @@ E2E (`npm run e2e:tachi`, gateway booted in-process with `ADAPTER_MODE=tachi`):
 - balances: merchant 44 999 → 39 998 (till 39 999 → 34 998, invoice key 5 000);
   customer 10 000 → 4 999 → 9 999
 
-## 5. Not implemented in real mode — and what it takes
+## 5. Payouts: the vault path works for real — the blocker is a missing bridge
 
-**L1 payouts (cooperative withdrawal, unilateral exit).** Today the merchant's
-funds are ledger VTXOs owned by plain keys. Moving value ledger → L1 needs one
-of two things the shipped SDK does not give a plain-key holder:
+**Verified on `tachi-regtest-1` (2026-08-26, `npm run spike:vault`,
+[docs/tachi-vault-spike.md](docs/tachi-vault-spike.md)).** The full Taurus
+vault path ran end to end with the shipped SDK:
 
-1. **A Taurus vault**: `createVault` (2-leaf P2TR: cooperative 5-of-7 leaf +
-   CSV exit leaf, quorum from `fetchConsensusQuorum`) → `depositToVault` (an L1
-   transaction from a **P2WPKH** funding wallet, i.e. the wallet-aggregator with
-   `scantxoutset` via the daemon's RPC proxy) → L1 confirmation →
-   `registerVault` (`TxVaultOpen`). With a vault, cooperative withdrawal is
-   `buildRefundPsbt → signRefundPsbtAsUser → cosignRefund (/tachi_signTransaction)
-   → finalizeRefundPsbt → sendrawtransaction`, and unilateral exit is
-   `buildUnilateralExitPsbt → sign → finalize → sendrawtransaction` after the
-   CSV delay — daemon-free, the sovereignty path.
-2. **`TxWithdraw`** (wire type 5) — exists in the daemon's tx types but the SDK
-   ships no builder and no documentation of its semantics, so it cannot be
-   implemented honestly from the client side.
+| Step | Result | Txid / id |
+| --- | --- | --- |
+| L1 funding wallet | faucet → 1 000 000 sats to our P2WPKH; aggregator `sync()` through the daemon's RPC proxy | `0269994eb2fce274d43c534aa52f609035a5a1d1cbe0819f933027fc758281ce` |
+| `createVault` | 2-leaf P2TR (5-of-7 cooperative + CSV exit), quorum from `/tachi_validatorsPower`, **`csvBlocks=1` accepted** | vault A `bcrt1pnrud4…c99s`, vault B `bcrt1p45gf…y2h9` |
+| `depositToVault` (L1) | 0.003 BTC into each vault | A `e4b6e9ec82e16e2ddcf70955c3473420c60edcae83f8987bc4e004a198f53dc4`, B `643a68dac299fb034f4ecc176be26eefc0c3bed1ee4a7fc17d37245703a8dce4` |
+| `registerVault` (`TxVaultOpen`) | committed, `code 0`; daemon lists the vaults `state: open` | A ledger tx `072484e7f7c01b3d1a5851313261ae62d067f4351365120317ce89b04df76166` → vaultId `e5f83fa6aa8c2635a3570010f4185e21d8c937d8be71b70f2009e18c6b21f1aa`; B vaultId `b74be6cc8abfeb7c51bd47b06b52025685171d14e36adec520e3c8e759c7a03e` |
+| **Unilateral exit** | `buildUnilateralExitPsbt` → **user signature only, no quorum** (3-item witness: sig, exit script, control block; `nSequence=1`) → **299 500 sats swept back to our P2WPKH, confirmed on L1** | `5bb2960bf27b6715228abe784a47bbb354b3aff3d7182e352fec882a7a67d0c3` |
+| **Cooperative refund** | `buildRefundPsbt` → user-signed → `POST /tachi_signTransaction` returned **5 partial signatures from 5 distinct validators** → 10-item witness (5 validator sigs + 2 empty slots + user sig + 274-byte script + control block) → **confirmed on L1** into the `to_local` commitment output | `b78cdb628a118fdb95090601914dedbaab4ba3c895432fbb10ea7bf25982f86b` |
 
-In short: as far as the published SDK and docs go, **there is no on-the-fly
-ledger → L1 exit for plain-key VTXO holders today** — that is our reading of
-the shipped surface, not a quoted Tachi statement; the open questions below are
-how we asked them to confirm or correct it.
+Cost and time: **782 sats** of L1 fees for the deposit + exit round trip;
+**~30 minutes end to end** at regtest's fixed 10-minute block cadence with
+`csvBlocks=1` (the SDK default of 1008 blocks would be ~7 days). The daemon's
+watchtower (`mode: detection`) scanned the exit's block and recorded no
+receipt — correct, an exit-leaf spend is not a breach — but the vault record
+stays `open` afterwards.
 
-Regtest L1 blocks are slow (minutes to hours between blocks during this
-session), which is why the vault path was not attempted in this timebox. The
-adapter therefore returns a `failed` payout carrying that explanation rather
-than pretending. The dashboard's Payouts view shows it as such.
+**Why `initiatePayout` is still simulated — precisely.** Registering a funded
+vault mints **no ledger VTXO**: after `TxVaultOpen` the vault address has
+`getLockedVtxos` empty and a ledger balance of 0; the vault's value is its L1
+funding UTXO. So there are **two separate value pools with no observed
+bridge**: the *vault pool* (L1 custody, exitable) and the *ledger-VTXO pool*
+(what merchants actually receive on invoices). A merchant can therefore exit
+only funds they first deposited into a vault **from L1** — not their sales.
+That, not time or SDK gaps, is what keeps payouts simulated: wiring the spike
+into `initiatePayout` today would demonstrate the mechanism on the merchant's
+own L1 deposit while leaving their receipts untouched. The adapter returns a
+`failed` payout carrying this explanation rather than pretending.
 
-**Open questions for the Tachi team:**
+`TxWithdraw` (wire type 5) exists in the daemon's tx types but the SDK ships no
+builder or semantics for it, so it cannot be implemented honestly client-side.
 
-1. *Is there a supported ledger → L1 withdrawal for plain-key VTXO holders (the
-   `TxWithdraw` wire type), or is a registered Taurus vault the only exit — and
-   if so, can a vault be funded from ledger VTXOs rather than from an L1 P2WPKH
-   wallet?* (Unblocks real-mode cooperative withdrawal + unilateral exit.)
-2. *The regtest daemon accepts a **self-signed `TxDeposit` with no L1 backing**
-   (fee ≥ 1 sat) — we used that to fund keys. Is that regtest-only? On signet /
-   mainnet, what is the sanctioned way ledger value comes into existence for a
-   merchant — vault deposit only?* (Determines the onboarding story outside regtest.)
+**On "on-the-fly" exit.** Our reading of the shipped surface remains that there
+is no direct ledger → L1 exit for plain-key VTXO holders; that reading is now
+matched by the team's own words:
+
+> "Yes, vault is the only vessel for the entry and exit. Regarding on-the-fly
+> exit from Tachi to Bitcoin L1, we don't have cryptographic support for it
+> just yet." — Tachi team, Telegram, Aug 2026
+
+The spike shows the **vault-based** exit does work; the two statements are
+consistent — the vault is the vessel, and what is missing is the on-the-fly
+(plain-key) path.
+
+**Open questions for the Tachi team (current):**
+
+1. **Is there, or will there be, a ledger → vault bridge?** Can ledger VTXOs
+   (invoice receipts) be moved into a vault's funding output — or otherwise
+   redeemed to L1 — without an L1 deposit? Answering this makes
+   `initiatePayout` roughly a **one-day job** on top of
+   [scripts/tachi-vault-spike.ts](scripts/tachi-vault-spike.ts).
+2. Should an observed exit-leaf spend transition the vault to a closed state on
+   the ledger (it currently stays `open`), and is there a `TxVaultClose` a
+   client should send?
+3. What CSV value is considered safe on signet/mainnet, given regtest accepted
+   `csvBlocks=1`?
 
 Smaller caveats: fees are the daemon's `min_fee_sat` (1 sat on regtest); a
 refund needs a *single* key holding `amount + fee` (fund the till); on-chain
-balance via `scantxoutset` is a full-UTXO-set scan and is cached for 60 s.
+balance via `scantxoutset` is a full-UTXO-set scan and is cached for 60 s; the
+regtest daemon accepts a self-signed `TxDeposit` with no L1 backing (how ledger
+value enters outside regtest is presumably vault deposit only — unverified).
 
 ## 6. Running it
 

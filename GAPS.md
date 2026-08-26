@@ -16,11 +16,15 @@ Fixed items stay listed with the gate that closed them.
 
 ## Open — real (tachi) mode
 
-- **No L1 payouts in real mode.** Cooperative withdrawal and unilateral exit
-  return a `failed` payout with the reason. They need a registered Taurus vault
-  funded from an L1 P2WPKH wallet (or a documented `TxWithdraw`); see
-  INTEGRATION.md §5 and the open question to Tachi. The mock's payout flows
-  remain the demo of the intended UX.
+- **No L1 payouts in real mode — mechanism proven, bridge missing.** The
+  Taurus vault path (create → L1 deposit → register → unilateral exit
+  `5bb2960b…d0c3` / 5-of-7 co-signed refund `b78cdb62…f86b`) ran for real on
+  regtest (`npm run spike:vault`, docs/tachi-vault-spike.md). But registering
+  a vault mints no ledger VTXO: invoice receipts (ledger VTXOs) and vault funds
+  (L1) are separate pools with no bridge, so wiring it in would let a merchant
+  exit only prior L1 deposits, not sales. `initiatePayout` therefore returns a
+  `failed` payout with that reason; the mock keeps demonstrating the UX. Open
+  question #1 to Tachi (INTEGRATION.md §5) unblocks it in ~a day.
 - **Refund needs one key holding `amount + fee`.** A TachiTx has a single
   signer, so funds can't be combined across keys in one send. An invoice key
   holds exactly its amount, so refunds are paid from the till key — keep it

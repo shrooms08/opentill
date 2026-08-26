@@ -29,7 +29,18 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 - local dry run: invoice paid `8cf39f07f2d01e621f80dc95561ae8b1f6468b03c49b4e70fa2481f968c17875` (gateway observed `seen` at t+2 s, `confirmed` at t+4 s)
 - e2e script: paid `d8fb214ede5a678a64e093262ca3b8572e081a5d06eeaec7721a5c0c2976146f`, refund `698e31285df5a0b6e383b05764799abc915d98e617b726f4847e8c73b90ebf71` — see [docs/tachi-e2e-output.md](docs/tachi-e2e-output.md); reproduce with `npm run e2e:tachi`.
 
-Merchant **payouts** (cooperative withdrawal / unilateral exit) remain simulated on both instances: moving ledger value back to L1 requires a registered Taurus vault, and the shipped Tachi SDK exposes no on-the-fly ledger→L1 exit for plain-key VTXO holders — see [INTEGRATION.md](INTEGRATION.md) §5 for the exact boundary and the open question put to the Tachi team.
+**Unilateral exit, proven on L1.** A real vault exit swept 299 500 sats back to
+a plain Bitcoin wallet with no network cooperation (`5bb2960bf27b6715228abe784a47bbb354b3aff3d7182e352fec882a7a67d0c3`), and a
+cooperative refund co-signed by 5 validators confirmed at `b78cdb628a118fdb95090601914dedbaab4ba3c895432fbb10ea7bf25982f86b` —
+reproduce with `npm run spike:vault`, full transcript in
+[docs/tachi-vault-spike.md](docs/tachi-vault-spike.md). (The funds exited were deposited from L1 for the spike, not merchant revenue.)
+
+Merchant **payouts** remain simulated in the product, and the reason is precise:
+registering a funded vault mints no ledger VTXO, so vault funds and invoice
+receipts (plain-key ledger VTXOs) are two separate pools with no bridge between
+them. The exit mechanism works; a merchant just can't yet route their *sales*
+into it. See [INTEGRATION.md](INTEGRATION.md) §5 and the open question to the
+Tachi team.
 
 ## Bounty #11 (Merchant Payments) — requirements
 
@@ -40,7 +51,7 @@ Merchant **payouts** (cooperative withdrawal / unilateral exit) remain simulated
 | **Dashboard w/ transactions + refunds** | `/dashboard` — overview, invoices table + detail slide-over, refund flow. | Test suite `gate3.test.ts` (stats, listing) + `dashboard-views.test.tsx`; screen `02-dashboard-overview`. |
 | **Self-hosted / open-source deployment** | One MIT-licensed container; `docker compose up`, or Fly.io (`fly deploy`), or `npm run dev`. | `Dockerfile`, `docker-compose.yml`, `fly.toml`; command `docker compose up --build`. |
 | **E-commerce plugin** | WooCommerce payment gateway (`plugins/opentill-for-woocommerce/`) + a from-scratch demo store. | Plugin `php -l` clean; integration test `demo store round trip`; screen `05-demo-store`. |
-| **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission) — full lifecycle in mock mode; **not yet in real mode** (needs a Taurus vault, see INTEGRATION.md §5). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
+| **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission) — full lifecycle in mock mode; **proven for real on regtest via a Taurus vault** (exit `5bb2960b…d0c3`, co-signed refund `b78cdb62…f86b`), not yet wired to invoice receipts (no ledger→vault bridge; INTEGRATION.md §5). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
 
 Screenshots live in [`docs/screenshots/`](docs/screenshots/). Demo video: **_(link to be added)_**.
 
@@ -128,7 +139,7 @@ full invoice → pay → confirm → refund loop through the gateway ([docs/tach
 
 Plainly, so there are no surprises:
 
-- **Real settlement covers receiving, not L1 payouts.** `ADAPTER_MODE=tachi` is live on Tachi regtest for invoices, detection, confirmation and refunds (e2e: payment `d8fb214e…146f`, refund `698e3128…bf71`). Cooperative withdrawal and unilateral exit are **not** implemented in real mode — they need a registered Taurus vault funded from an L1 P2WPKH wallet (or a documented `TxWithdraw`); the adapter returns a `failed` payout that says so. `ADAPTER_MODE=mock` still demonstrates the full payout/exit UX. Details, real ids, and the open question to Tachi: **[INTEGRATION.md](INTEGRATION.md)**.
+- **Real settlement covers receiving; payouts are proven but not bridged.** `ADAPTER_MODE=tachi` is live on Tachi regtest for invoices, detection, confirmation and refunds (e2e: payment `d8fb214e…146f`, refund `698e3128…bf71`). The vault path — `createVault → depositToVault → registerVault → unilateral exit` (`5bb2960b…d0c3`) and a 5-of-7 co-signed cooperative refund (`b78cdb62…f86b`) — ran for real (`npm run spike:vault`). `initiatePayout` still returns a `failed` payout in real mode because registering a vault mints no ledger VTXO: invoice receipts (ledger VTXOs) and vault funds (L1) are two pools with no bridge, so a merchant could exit only prior L1 deposits, not sales. Tachi: "vault is the only vessel for the entry and exit … we don't have cryptographic support for [on-the-fly exit] just yet." `ADAPTER_MODE=mock` still demonstrates the payout/exit UX. Details: **[INTEGRATION.md](INTEGRATION.md)** §5.
 - **WooCommerce sats conversion is a fixed rate.** The plugin converts order totals to sats via a merchant-set "sats per currency unit" number — no live BTC/fiat feed. Price products in sats (rate = 1) or pin a rate you manage. See the [plugin README](plugins/opentill-for-woocommerce/README.md).
 - **Single-merchant auth.** One API key, one merchant, one storefront (`OPENTILL_MERCHANT_NAME`). No multi-tenant accounts — that is deliberate for a self-hosted tool.
 
