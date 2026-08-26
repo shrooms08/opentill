@@ -13,7 +13,7 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
  your backend ──▶│  /api/*        invoices · refunds · stats · payouts  (Bearer API key)         │
                  │                                                                               │
                  │   Fastify ── SQLite (WAL) ── pollers ──▶ TachiAdapter ──▶ Tachi network       │
-                 │      │                                   (mock | tachi)   (ledger VTXOs)     │
+                 │      │                                   (mock | tachi)   (ledger VTXOs)      │
                  │      └──▶ HMAC-signed webhooks ──▶ your store (WooCommerce plugin, any HTTP)  │
                  └───────────────────────────────────────────────────────────────────────────────┘
 ```
