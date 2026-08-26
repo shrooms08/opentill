@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- stage 1: build workspaces + web bundle --------------------------------
-FROM node:20-bookworm AS build
+FROM node:22-bookworm AS build
 WORKDIR /app
 
 # Manifests first so dependency layers cache across source changes.
@@ -20,7 +20,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ---- stage 2: slim runtime --------------------------------------------------
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 

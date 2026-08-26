@@ -12,3 +12,4 @@ coverage/
 
 # Tachi regtest smoke/e2e key material (test coins only)
 .tachi-smoke-state.json
+.tachi-spike-state.json

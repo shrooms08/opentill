@@ -20,6 +20,17 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 
 **Status:** engine, UIs, deployment, and integrations are complete and tested (195 tests). Settlement has **two adapters behind one interface**: `ADAPTER_MODE=mock` (the test/demo/CI adapter — no real Bitcoin moves, labeled as such in the dashboard) and `ADAPTER_MODE=tachi` — **real settlement on the Tachi ledger, proven end to end on regtest**: per-invoice addresses, live payment detection, `confirmed`, and refunds, with real transaction ids in [INTEGRATION.md](INTEGRATION.md). L1 payouts (cooperative withdrawal / unilateral exit) are not implemented in real mode yet — see Limitations.
 
+**Try it**
+- Mock demo (always works): https://opentill-demo.fly.dev
+- Real settlement on `tachi-regtest-1`: https://opentill-live.fly.dev — real VTXO transactions, small regtest float, may run dry.
+
+**Verified real settlement** (Tachi regtest, 2026-08-26):
+- opentill-live: invoice paid `d1c157267f12532037770aff06f9084d77a13f474aebfe1ffcb4a1b4ad15d083`, refund broadcast `f4b3c19c0777326800f0efaf44b403a9107325264e80403bf6bd466f6b02841a`
+- local dry run: invoice paid `8cf39f07f2d01e621f80dc95561ae8b1f6468b03c49b4e70fa2481f968c17875` (gateway observed `seen` at t+2 s, `confirmed` at t+4 s)
+- e2e script: paid `d8fb214ede5a678a64e093262ca3b8572e081a5d06eeaec7721a5c0c2976146f`, refund `698e31285df5a0b6e383b05764799abc915d98e617b726f4847e8c73b90ebf71` — see [docs/tachi-e2e-output.md](docs/tachi-e2e-output.md); reproduce with `npm run e2e:tachi`.
+
+Merchant **payouts** (cooperative withdrawal / unilateral exit) remain simulated on both instances: moving ledger value back to L1 requires a registered Taurus vault, and the shipped Tachi SDK exposes no on-the-fly ledger→L1 exit for plain-key VTXO holders — see [INTEGRATION.md](INTEGRATION.md) §5 for the exact boundary and the open question put to the Tachi team.
+
 ## Bounty #11 (Merchant Payments) — requirements
 
 | Requirement | Where OpenTill satisfies it | Proof |

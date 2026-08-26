@@ -90,6 +90,16 @@ Smoke (`npm run smoke:tachi`, regtest):
   (10 000 to key1, 39 999 change); `pending` + `committed` alerts received on
   **both** sender and receiver `watch({ address })` filters
 
+Public live instance (`https://opentill-live.fly.dev`, `ADAPTER_MODE=tachi`, deployed 2026-08-26):
+
+- boot: `tachi: connected {chainId: "tachi-regtest-1", height: 497237, tillAddress: "bcrt1psgqq…ung6", statePath: "/data/tachi-state.json"}`
+- till funded by ledger deposit `af05fd1d…caf6` (50 000 sats)
+- invoice `inv_8f82edc44c0a429b8f251c03d075ca99` (2 000 sats) paid `d1c15726…d083` → `confirmed` at the first 2 s tick → refund `f4b3c19c…841a` → `refunded`
+
+Local dry run (same code, different throwaway mnemonic): invoice `inv_b67a9b33…1a9f` paid
+`8cf39f07…7875`; the gateway reported the payment as `seen` at t+2 s and `confirmed` at t+4 s —
+the transient state is observable when the poll tick lands between CheckTx and the block.
+
 E2E (`npm run e2e:tachi`, gateway booted in-process with `ADAPTER_MODE=tachi`):
 
 - invoice `inv_d5884327d79942c0a2c108be710a27c1` (5 000 sats) → real address
@@ -119,6 +129,11 @@ of two things the shipped SDK does not give a plain-key holder:
 2. **`TxWithdraw`** (wire type 5) — exists in the daemon's tx types but the SDK
    ships no builder and no documentation of its semantics, so it cannot be
    implemented honestly from the client side.
+
+In short: as far as the published SDK and docs go, **there is no on-the-fly
+ledger → L1 exit for plain-key VTXO holders today** — that is our reading of
+the shipped surface, not a quoted Tachi statement; the open questions below are
+how we asked them to confirm or correct it.
 
 Regtest L1 blocks are slow (minutes to hours between blocks during this
 session), which is why the vault path was not attempted in this timebox. The

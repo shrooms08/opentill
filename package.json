@@ -19,7 +19,10 @@
     "dev:web": "npm run dev -w @opentill/web",
     "build:plugin": "sh scripts/build-plugin-zip.sh",
     "smoke:tachi": "tsx scripts/tachi-smoke.ts",
-    "e2e:tachi": "tsx scripts/tachi-e2e.ts"
+    "e2e:tachi": "tsx scripts/tachi-e2e.ts",
+    "fund:tachi": "tsx scripts/tachi-fund.ts",
+    "pay:tachi": "tsx scripts/tachi-pay.ts",
+    "spike:vault": "tsx scripts/tachi-vault-spike.ts"
   },
   "devDependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",
