@@ -12,11 +12,15 @@
  *    L1 UTXOs at our taproot addresses via the daemon's Bitcoin RPC proxy.
  *
  * What is NOT implemented in real mode (honest boundary, see INTEGRATION.md):
- *  - payouts to L1 (cooperative withdrawal / unilateral exit). Both need an
- *    L1-funded, registered Taurus vault (createVault → depositToVault →
- *    registerVault) plus the refund-cosign / exit PSBT flows; the ledger→L1
- *    `TxWithdraw` type exists on the wire but the SDK ships no builder for it.
- *    initiatePayout therefore returns a `failed` payout that says so.
+ *  - payouts to L1. The route is: lock a receipt VTXO into a vault with
+ *    `TxLockForVault`, then take that vault's cooperative refund (normal case)
+ *    or unilateral exit (backstop) — both exits are proven on regtest, see
+ *    INTEGRATION.md 5.1. The SDK ships no builder for the lock step, so
+ *    initiatePayout returns a `failed` payout that says so.
+ *
+ *    Not `TxWithdraw`: Tachi confirmed at source level that the type is
+ *    unimplemented beyond generic format checks, so a payout built on it would
+ *    commit and move nothing to L1 while looking like a success.
  */
 import type { TachiClient } from "@tachibtc/tachi-sdk-ts";
 import { getAccountNonce, waitForTachiTxCommit } from "@tachibtc/taurus-vault-core";
@@ -298,10 +302,11 @@ export class TachiRealAdapter implements TachiAdapter {
   // ---- payouts (not implemented in real mode) --------------------------------
 
   async initiatePayout(params: { kind: PayoutKind; toAddress: string; amountSats?: bigint }): Promise<AdapterPayout> {
+    // Both payout kinds fail for the same reason: they exit a vault, and this
+    // deployment holds plain ledger VTXOs that cannot yet be locked into one.
     const why =
-      params.kind === "exit"
-        ? "unilateral exit needs an L1-funded, registered Taurus vault (buildUnilateralExitPsbt spends the vault's exit leaf); this deployment holds ledger VTXOs, not a vault"
-        : "cooperative withdrawal to L1 needs a registered Taurus vault + the refund co-sign flow (or the wire-level TxWithdraw, for which the SDK ships no builder)";
+      "both payout kinds exit a Taurus vault, and this deployment holds plain ledger VTXOs; " +
+      "locking them into a vault (TxLockForVault) has no SDK builder yet";
     return {
       payoutId: `unimpl_${this.#now().toString(36)}`,
       kind: params.kind,
