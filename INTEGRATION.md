@@ -8,9 +8,10 @@ mock adapter remains the test/demo/CI adapter; `ADAPTER_MODE=tachi` selects
 the real one behind the same `TachiAdapter` interface.
 
 What is **not** implemented in real mode: **payouts to L1** — cooperative
-withdrawal and unilateral exit. The protocol has the paths (`TxWithdraw`,
-`TxLockForVault`); the shipped SDK has no builders for them yet. §5 has the
-verified vault exit, the three paths, and exactly what is missing.
+withdrawal and unilateral exit. The route exists — lock a receipt VTXO into a
+vault with `TxLockForVault`, then take the vault exit this repo has already
+driven for real on L1 — but the shipped SDK has no builder for the lock step.
+§5 has the verified vault exit, the corrected path, and exactly what is missing.
 
 Ground truth for every claim here: [`docs/tachi-smoke-output.md`](docs/tachi-smoke-output.md)
 (verbatim daemon responses) and [`docs/tachi-e2e-output.md`](docs/tachi-e2e-output.md)
@@ -72,7 +73,7 @@ invoice. That is why OpenTill does *not* create a Taurus vault per invoice.
 | `pollIncoming(cursor)` | per watched address: `getMempoolByAddress` → **seen** (paymentId = `computeVtxoId(tx_hash, vout)`), `getAddressVtxos(addr, includeSpent)` → **committed** for VTXOs above the height cursor. Cursor = daemon height at tick start − 1, so a block landing mid-tick is never skipped; the gateway is idempotent on `(paymentId, status)` | e2e: invoice `pending → confirmed` via real ticks (the block landed before the first tick, so the gateway saw the payment straight as `committed`; the `seen` mapping is unit-tested and the underlying `pending`→`committed` alert pair was observed live via `watch` in the smoke) |
 | `send` (refund) | pick one key covering `amount + fee` (one TachiTx = one signer), largest-first inputs, change back, `getAccountNonce`, sign, `broadcastTxSync` → assert `code === 0` → `waitForTachiTxCommit` → assert committed; returns the tx hash | e2e refund `698e3128…bf71` |
 | `getBalance` | off-chain = Σ `getBalance(key)`; on-chain = `scantxoutset` over our `addr()` descriptors through the daemon's Bitcoin RPC proxy (cached) | e2e: 39 998 off-chain / 200 000 on-chain |
-| `initiatePayout` | **not implemented** — returns a `failed` payout with the reason: no SDK builder for `TxWithdraw` / `TxLockForVault` yet (§5.4) | unit test |
+| `initiatePayout` | **not implemented** — returns a `failed` payout with the reason: no SDK builder for `TxLockForVault` yet (§5.4) | unit test |
 | `pollPayouts` | `[]` | — |
 
 Polling is the correctness path (crash-safe by construction). `watch()` was
@@ -151,36 +152,97 @@ moves a ledger VTXO into vault custody. Our spike simply never used it.
    lock an existing ledger VTXO under a vault address, or release it back. This
    is the path for putting merchant-receipt VTXOs under vault custody, and thus
    under the quorum-cosigned refund and unilateral-exit guarantees of 5.1.
-3. **`TxWithdraw`** (wire type 5) — a **plain ledger → L1 exit that needs no
-   vault**: any ledger VTXO, including merchant receipts, can offboard straight
-   to L1.
+3. **`TxWithdraw`** (wire type 5) — described as a **plain ledger → L1 exit
+   needing no vault**. **Retracted days later; see 5.3b.**
 
-Tachi's recommendation: `TxWithdraw` is the more direct fix for "real sales →
-real payout"; use `TxLockForVault` first only if you specifically want the
-quorum-cosigned / unilateral-exit guarantees on those funds.
+Tachi's recommendation at the time: `TxWithdraw` is the more direct fix for
+"real sales → real payout"; use `TxLockForVault` first only if you specifically
+want the quorum-cosigned / unilateral-exit guarantees on those funds.
 
 This retires the claim, made in earlier revisions of this file and echoed by an
 earlier Tachi message ("vault is the only vessel for the entry and exit …
 we don't have cryptographic support for [on-the-fly exit] just yet" — Tachi
 team, Telegram, Aug 2026), that no ledger → L1 path exists for plain-key VTXO
-holders. The later clarification supersedes it: the protocol has one
-(`TxWithdraw`), and a bridge into vault custody (`TxLockForVault`).
+holders. A path does exist — but it is the bridge into vault custody
+(`TxLockForVault`) plus the vault exit of 5.1, **not** `TxWithdraw`, which 5.3b
+retracts. Two corrections in one month, in opposite directions; both are kept
+here on purpose, because the sequence is the useful part.
+
+### 5.3b Correction: `TxWithdraw` is a dead end (Tachi team, Telegram, Aug 2026)
+
+Tachi inspected their own source and **withdrew the recommendation above**.
+Paraphrasing them: `TxWithdraw` (0x05) is **unimplemented, not merely
+undocumented**. It has zero special-case handling in consensus or mempool beyond
+generic format checks — it is validated exactly like a transfer (inputs,
+outputs, valid signature, balance) and simply moves VTXOs around the ledger.
+There is **no L1 broadcast, no destination-address semantics, and nothing
+withdraw-specific implemented**. There is no payload for us to mirror because
+the daemon does nothing with the type.
+
+Stated plainly, because it nearly cost us: a payout built on `TxWithdraw` would
+be accepted, would commit with `code 0`, and would move **nothing** to L1. It
+would look exactly like a successful payout. 5.4's refusal to hand-assemble an
+undocumented payload is the only reason we did not ship that.
+
+So the route from merchant receipts to L1 is **not** `TxWithdraw`. It is:
+
+> receipts (plain-key ledger VTXOs) → **`TxLockForVault`** into a vault → the
+> vault exit proven in 5.1 — cooperative refund
+> (`b78cdb628a118fdb95090601914dedbaab4ba3c895432fbb10ea7bf25982f86b`) for
+> normal payouts, unilateral exit
+> (`5bb2960bf27b6715228abe784a47bbb354b3aff3d7182e352fec882a7a67d0c3`) as the
+> sovereignty backstop.
+
+Both halves of that exit already work. `TxLockForVault` is the join.
+
+### 5.3c `TxLockForVault` (0x06) — the wire contract
+
+Tachi gave us the contract directly, so this is implementable without a builder
+to copy:
+
+- Same base fields as any transaction: inputs, outputs, fee, `pubKey`,
+  `signature`, `nonce`.
+- **`PSBTPayload` is required** and must be a **finalized PSBT with exactly one
+  P2TR output**. The daemon decodes that output's witness program directly into
+  the vault's bech32m address. Zero taproot outputs fails validation; more than
+  one fails validation.
+- Referenced input VTXOs must exist and must not already be locked.
+- Only a fee-balance check applies, since the lock creates no new VTXO outputs —
+  though the generic format check still expects `Outputs` to be non-empty. What
+  that path actually accepts for a lock is worth confirming empirically rather
+  than assuming.
+- To build one: construct a PSBT whose single output pays the target vault's
+  taproot address (the same address derived at vault open), finalize it, and put
+  the raw bytes in `PSBTPayload`.
+
+`TxUnlockFromVault` is the corresponding release path. `npm run spike:lock` is
+our attempt at this; results will land in
+[docs/tachi-lock-spike.md](docs/tachi-lock-spike.md).
 
 ### 5.4 Why `initiatePayout` is still simulated — precisely
 
 **An SDK/tooling gap, not a protocol gap.** The shipped TypeScript SDK
-(`@tachibtc/taurus-vault-core` 0.3.3) exports the `TxWithdraw` type constant
-but provides **no builder and no documented payload semantics** for
-`TxWithdraw`, and nothing at all for `TxLockForVault` / `TxUnlockFromVault`.
-Every other ledger transaction we send (`TxDeposit`, `TxTransfer`,
-`TxVaultOpen`) has an SDK builder whose wire encoding we could verify against
-the daemon; hand-assembling an undocumented payload and broadcasting it would
-be guessing with real (test) money, so we don't. **We have asked Tachi for a
-payload reference or a Go-side builder to mirror.** Until then the adapter
-returns a `failed` payout carrying this explanation, and `ADAPTER_MODE=mock`
-demonstrates the payout/exit UX. With a builder in hand, `initiatePayout` is a
-short job: `TxWithdraw` slots straight into the adapter's existing
-build → sign → `broadcastTxSync` → assert `code 0` → wait-for-commit path.
+(`@tachibtc/taurus-vault-core` 0.3.3) provides **no builder for
+`TxLockForVault` / `TxUnlockFromVault`**. Every other ledger transaction we send
+(`TxDeposit`, `TxTransfer`, `TxVaultOpen`) has an SDK builder whose wire
+encoding we could verify against the daemon; hand-assembling an undocumented
+payload and broadcasting it would be guessing with real (test) money, so we
+don't.
+
+That caution is now vindicated rather than merely prudent. The SDK also exports
+a `TxWithdraw` type constant, and Tachi initially pointed us at it as the
+simpler vault-free exit — but the type is unimplemented (5.3b), so building on
+it would have produced a payout that committed and moved nothing. Refusing to
+guess at a payload is what kept that out of the product.
+
+`TxLockForVault` is a different case: its contract **is** specified (5.3c), so
+it needs building and verifying rather than waiting on Tachi. `npm run
+spike:lock` is that work. Until it lands the adapter returns a `failed` payout
+carrying this explanation, and `ADAPTER_MODE=mock` demonstrates the payout/exit
+UX. Once the lock step is proven, `initiatePayout` becomes two stages on the
+adapter's existing build → sign → `broadcastTxSync` → assert `code 0` →
+wait-for-commit path: lock the receipt VTXO into the vault, then run the exit
+that 5.1 already proved.
 
 ### 5.5 Also answered
 
@@ -207,9 +269,13 @@ build → sign → `broadcastTxSync` → assert `code 0` → wait-for-commit pat
 
 ### 5.6 Still open
 
-1. **SDK builder / payload reference for `TxWithdraw` and `TxLockForVault` /
-   `TxUnlockFromVault`** — the only thing between OpenTill's receipts and a real
-   payout (asked; awaiting a reference or a Go-side builder to mirror).
+1. **SDK builder for `TxLockForVault` / `TxUnlockFromVault`** — the only thing
+   between OpenTill's receipts and a real payout. Unlike the retracted
+   `TxWithdraw` ask, this is not blocked on Tachi: the wire contract is specified
+   (5.3c) and the exit on the far side is proven (5.1), so it is ours to build
+   and verify (`npm run spike:lock`). *(The earlier ask — a payload reference for
+   `TxWithdraw` — is closed: there is nothing to reference, because the type is
+   unimplemented.)*
 2. Carried from OpenSluice, tracked here for completeness: delegated LP custody
    semantics; the meaning of broadcast `code=5`; nonce behavior (we observed the
    account nonce staying at 0 after committed txs — the adapter always reads

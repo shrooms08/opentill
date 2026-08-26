@@ -38,11 +38,14 @@ reproduce with `npm run spike:vault`, full transcript in
 Merchant **payouts** remain simulated in the product, and the reason is precise —
 and it is a tooling gap, not a protocol gap. Tachi confirms three ledger→L1
 paths: `TxVaultOpen` (what the spike used; binds an L1 outpoint, never touches
-ledger VTXOs), `TxLockForVault`/`TxUnlockFromVault` (the bridge that puts
-merchant-receipt VTXOs under vault custody), and `TxWithdraw` (a plain
-ledger→L1 exit needing no vault — their recommended route for "real sales →
-real payout"). The shipped TypeScript SDK ships no builder or payload reference
-for `TxWithdraw` or `TxLockForVault`; we've asked for one. See
+ledger VTXOs) and `TxLockForVault`/`TxUnlockFromVault` (the bridge that puts
+merchant-receipt VTXOs under vault custody). They initially named a third,
+`TxWithdraw`, as a vault-free exit and recommended it — then inspected their
+source and retracted it: the type is unimplemented, so a payout built on it
+would commit and move nothing. The route is therefore receipts →
+`TxLockForVault` → the vault exit already proven above. The shipped TypeScript
+SDK ships no builder for `TxLockForVault`, but its wire contract is specified,
+so we are building it (`npm run spike:lock`). See
 [INTEGRATION.md](INTEGRATION.md) §5.
 
 ## Bounty #11 (Merchant Payments) — requirements
@@ -54,7 +57,7 @@ for `TxWithdraw` or `TxLockForVault`; we've asked for one. See
 | **Dashboard w/ transactions + refunds** | `/dashboard` — overview, invoices table + detail slide-over, refund flow. | Test suite `gate3.test.ts` (stats, listing) + `dashboard-views.test.tsx`; screen `02-dashboard-overview`. |
 | **Self-hosted / open-source deployment** | One MIT-licensed container; `docker compose up`, or Fly.io (`fly deploy`), or `npm run dev`. | `Dockerfile`, `docker-compose.yml`, `fly.toml`; command `docker compose up --build`. |
 | **E-commerce plugin** | WooCommerce payment gateway (`plugins/opentill-for-woocommerce/`) + a from-scratch demo store. | Plugin `php -l` clean; integration test `demo store round trip`; screen `05-demo-store`. |
-| **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission) — full lifecycle in mock mode; **proven for real on regtest via a Taurus vault** (exit `5bb2960b…d0c3`, co-signed refund `b78cdb62…f86b`). Wiring receipts to it awaits an SDK builder for `TxWithdraw`/`TxLockForVault` (INTEGRATION.md §5). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
+| **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission) — full lifecycle in mock mode; **proven for real on regtest via a Taurus vault** (exit `5bb2960b…d0c3`, co-signed refund `b78cdb62…f86b`). Wiring receipts to it awaits an SDK builder for `TxLockForVault` (INTEGRATION.md §5). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
 
 Screenshots live in [`docs/screenshots/`](docs/screenshots/). Demo video: **_(link to be added)_**.
 
@@ -143,7 +146,7 @@ full invoice → pay → confirm → refund loop through the gateway ([docs/tach
 
 Plainly, so there are no surprises:
 
-- **Real settlement covers receiving; payouts are proven but await SDK tooling.** `ADAPTER_MODE=tachi` is live on Tachi regtest for invoices, detection, confirmation and refunds (e2e: payment `d8fb214e…146f`, refund `698e3128…bf71`). The vault path — `createVault → depositToVault → registerVault → unilateral exit` (`5bb2960b…d0c3`) and a 5-of-7 co-signed cooperative refund (`b78cdb62…f86b`) — ran for real (`npm run spike:vault`). `initiatePayout` still returns a `failed` payout in real mode because the shipped TS SDK provides no builder or documented payload for `TxWithdraw` (plain ledger→L1 exit, no vault) or `TxLockForVault` (ledger→vault bridge) — both of which Tachi confirms exist on the protocol. A payload reference or Go-side builder has been requested; with it, this is a short job on the adapter's existing broadcast path. `ADAPTER_MODE=mock` still demonstrates the payout/exit UX. Details: **[INTEGRATION.md](INTEGRATION.md)** §5.
+- **Real settlement covers receiving; payouts are proven but await SDK tooling.** `ADAPTER_MODE=tachi` is live on Tachi regtest for invoices, detection, confirmation and refunds (e2e: payment `d8fb214e…146f`, refund `698e3128…bf71`). The vault path — `createVault → depositToVault → registerVault → unilateral exit` (`5bb2960b…d0c3`) and a 5-of-7 co-signed cooperative refund (`b78cdb62…f86b`) — ran for real (`npm run spike:vault`). `initiatePayout` still returns a `failed` payout in real mode because the shipped TS SDK provides no builder for `TxLockForVault`, the ledger→vault bridge. (Tachi first recommended `TxWithdraw` as a vault-free exit, then retracted it — that type is unimplemented, so a payout built on it would commit and move nothing.) `TxLockForVault`'s wire contract is specified, so this is ours to build and verify rather than blocked: `npm run spike:lock`. With the lock proven, payout is two stages on the adapter's existing broadcast path — lock the receipt, then run the exit above. `ADAPTER_MODE=mock` still demonstrates the payout/exit UX. Details: **[INTEGRATION.md](INTEGRATION.md)** §5.
 - **WooCommerce sats conversion is a fixed rate.** The plugin converts order totals to sats via a merchant-set "sats per currency unit" number — no live BTC/fiat feed. Price products in sats (rate = 1) or pin a rate you manage. See the [plugin README](plugins/opentill-for-woocommerce/README.md).
 - **Single-merchant auth.** One API key, one merchant, one storefront (`OPENTILL_MERCHANT_NAME`). No multi-tenant accounts — that is deliberate for a self-hosted tool.
 

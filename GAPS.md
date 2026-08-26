@@ -20,11 +20,16 @@ Fixed items stay listed with the gate that closed them.
   Taurus vault path (create → L1 deposit → register → unilateral exit
   `5bb2960b…d0c3` / 5-of-7 co-signed refund `b78cdb62…f86b`) ran for real on
   regtest (`npm run spike:vault`). Tachi confirms the missing pieces exist on
-  the protocol: `TxWithdraw` (plain ledger→L1 exit, no vault — their
-  recommended route for sales → payout) and `TxLockForVault`/`TxUnlockFromVault`
-  (the ledger→vault bridge; `TxVaultOpen` alone never touches ledger VTXOs,
-  which is why the spike could only exit self-deposited funds). The shipped TS
-  SDK has no builder or payload reference for either; one has been requested.
+  the protocol: `TxLockForVault`/`TxUnlockFromVault`, the ledger→vault bridge
+  (`TxVaultOpen` alone never touches ledger VTXOs, which is why the spike could
+  only exit self-deposited funds). Tachi first pointed us at `TxWithdraw` as a
+  simpler vault-free exit, then inspected their source and retracted it: the type
+  is **unimplemented** beyond generic format checks — no L1 broadcast, no
+  destination semantics — so a payout built on it would commit and move nothing
+  while appearing to succeed. The shipped TS SDK has no builder for
+  `TxLockForVault`, but its wire contract is now specified (finalized PSBT with
+  exactly one P2TR output in `PSBTPayload`), so it is ours to build and verify
+  rather than blocked on Tachi — `npm run spike:lock`.
   `initiatePayout` therefore returns a `failed` payout with that reason; the
   mock keeps demonstrating the UX. With a builder, wiring is a short job on the
   adapter's existing build → sign → broadcast → assert `code 0` → commit path.
