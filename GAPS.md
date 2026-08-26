@@ -16,23 +16,39 @@ Fixed items stay listed with the gate that closed them.
 
 ## Open — real (tachi) mode
 
-- **No L1 payouts in real mode — mechanism proven, bridge missing.** The
+- **No L1 payouts in real mode — SDK builders missing, not protocol.** The
   Taurus vault path (create → L1 deposit → register → unilateral exit
   `5bb2960b…d0c3` / 5-of-7 co-signed refund `b78cdb62…f86b`) ran for real on
-  regtest (`npm run spike:vault`, docs/tachi-vault-spike.md). But registering
-  a vault mints no ledger VTXO: invoice receipts (ledger VTXOs) and vault funds
-  (L1) are separate pools with no bridge, so wiring it in would let a merchant
-  exit only prior L1 deposits, not sales. `initiatePayout` therefore returns a
-  `failed` payout with that reason; the mock keeps demonstrating the UX. Open
-  question #1 to Tachi (INTEGRATION.md §5) unblocks it in ~a day.
+  regtest (`npm run spike:vault`). Tachi confirms the missing pieces exist on
+  the protocol: `TxWithdraw` (plain ledger→L1 exit, no vault — their
+  recommended route for sales → payout) and `TxLockForVault`/`TxUnlockFromVault`
+  (the ledger→vault bridge; `TxVaultOpen` alone never touches ledger VTXOs,
+  which is why the spike could only exit self-deposited funds). The shipped TS
+  SDK has no builder or payload reference for either; one has been requested.
+  `initiatePayout` therefore returns a `failed` payout with that reason; the
+  mock keeps demonstrating the UX. With a builder, wiring is a short job on the
+  adapter's existing build → sign → broadcast → assert `code 0` → commit path.
+- **Vault liveness must be self-observed.** `TxVaultClose` is defined but not
+  wired; the daemon reports every vault as `"open"` forever. A real-mode payout
+  feature must detect exit-leaf spends from its own L1 observation.
+- **CSV default must be 1008, not the spike's 1.** No protocol minimum exists;
+  `csvBlocks=1` was accepted only because nothing stops it. A product default
+  of 1008 blocks (~7 days) is conventional; the true lower bound is the
+  operator's monitoring latency.
 - **Refund needs one key holding `amount + fee`.** A TachiTx has a single
   signer, so funds can't be combined across keys in one send. An invoice key
   holds exactly its amount, so refunds are paid from the till key — keep it
   funded. Consolidation (sweeping invoice keys into the till) is not automated.
-- **Ledger onboarding outside regtest is unverified.** Our keys were funded
-  via a self-signed `TxDeposit` the regtest daemon accepts without L1 backing;
-  the sanctioned signet/mainnet path (presumably vault deposit only) is an open
-  question to Tachi (INTEGRATION.md §5).
+- **Mainnet deposits need L1 backing + validator attestation.** Self-signed
+  `TxDeposit`s are sanctioned on regtest and signet (Tachi: the L1 verification
+  gate is mainnet-only), so `npm run fund:tachi` is legitimate testnet behavior.
+  On mainnet the adapter would have to: reference a real on-chain deposit whose
+  amount and block height/timestamp match exactly, and treat the deposit as
+  credited only after validator attestations clear the threshold — not on
+  broadcast `code 0`. Neither the attestation wait nor its status surface is
+  implemented; the mainnet deposit flow is unexercised.
+- **Signet is untested but feasible.** Same code path and same funding approach
+  as regtest (`TACHI_NETWORK=signet`); only regtest has been run.
 - **No `watch()` supplement.** Detection is polling only (2 s tick); the
   WebSocket stream was verified but not wired in.
 - **Fees are the daemon minimum** (`min_fee_sat`, 1 sat on regtest); no fee
@@ -42,8 +58,6 @@ Fixed items stay listed with the gate that closed them.
 - **State file is the key index.** `TACHI_STATE_PATH` is re-derivable from the
   mnemonic but there is no automated rescan to rebuild it; back it up with the DB.
 - **Node ≥ 22 required in tachi mode** (SDK engines); mock mode still runs on 20.
-- **Signet untested.** The code path is identical (`TACHI_NETWORK=signet`,
-  chain-id check `tachi-signet*`) but only regtest was exercised.
 
 ## Open — integrations & deployment
 

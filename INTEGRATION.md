@@ -8,7 +8,9 @@ mock adapter remains the test/demo/CI adapter; `ADAPTER_MODE=tachi` selects
 the real one behind the same `TachiAdapter` interface.
 
 What is **not** implemented in real mode: **payouts to L1** — cooperative
-withdrawal and unilateral exit. §5 says exactly why and what it would take.
+withdrawal and unilateral exit. The protocol has the paths (`TxWithdraw`,
+`TxLockForVault`); the shipped SDK has no builders for them yet. §5 has the
+verified vault exit, the three paths, and exactly what is missing.
 
 Ground truth for every claim here: [`docs/tachi-smoke-output.md`](docs/tachi-smoke-output.md)
 (verbatim daemon responses) and [`docs/tachi-e2e-output.md`](docs/tachi-e2e-output.md)
@@ -70,7 +72,7 @@ invoice. That is why OpenTill does *not* create a Taurus vault per invoice.
 | `pollIncoming(cursor)` | per watched address: `getMempoolByAddress` → **seen** (paymentId = `computeVtxoId(tx_hash, vout)`), `getAddressVtxos(addr, includeSpent)` → **committed** for VTXOs above the height cursor. Cursor = daemon height at tick start − 1, so a block landing mid-tick is never skipped; the gateway is idempotent on `(paymentId, status)` | e2e: invoice `pending → confirmed` via real ticks (the block landed before the first tick, so the gateway saw the payment straight as `committed`; the `seen` mapping is unit-tested and the underlying `pending`→`committed` alert pair was observed live via `watch` in the smoke) |
 | `send` (refund) | pick one key covering `amount + fee` (one TachiTx = one signer), largest-first inputs, change back, `getAccountNonce`, sign, `broadcastTxSync` → assert `code === 0` → `waitForTachiTxCommit` → assert committed; returns the tx hash | e2e refund `698e3128…bf71` |
 | `getBalance` | off-chain = Σ `getBalance(key)`; on-chain = `scantxoutset` over our `addr()` descriptors through the daemon's Bitcoin RPC proxy (cached) | e2e: 39 998 off-chain / 200 000 on-chain |
-| `initiatePayout` | **not implemented** — returns a `failed` payout with the reason (§5) | unit test |
+| `initiatePayout` | **not implemented** — returns a `failed` payout with the reason: no SDK builder for `TxWithdraw` / `TxLockForVault` yet (§5.4) | unit test |
 | `pollPayouts` | `[]` | — |
 
 Polling is the correctness path (crash-safe by construction). `watch()` was
@@ -111,73 +113,111 @@ E2E (`npm run e2e:tachi`, gateway booted in-process with `ADAPTER_MODE=tachi`):
 - balances: merchant 44 999 → 39 998 (till 39 999 → 34 998, invoice key 5 000);
   customer 10 000 → 4 999 → 9 999
 
-## 5. Payouts: the vault path works for real — the blocker is a missing bridge
+## 5. Payouts: every path exists on the protocol — the gap is SDK tooling
 
-**Verified on `tachi-regtest-1` (2026-08-26, `npm run spike:vault`,
-[docs/tachi-vault-spike.md](docs/tachi-vault-spike.md)).** The full Taurus
-vault path ran end to end with the shipped SDK:
+### 5.1 What ran for real (vault path, `npm run spike:vault`)
+
+Verified on `tachi-regtest-1`, 2026-08-26, full transcript in
+[docs/tachi-vault-spike.md](docs/tachi-vault-spike.md):
 
 | Step | Result | Txid / id |
 | --- | --- | --- |
 | L1 funding wallet | faucet → 1 000 000 sats to our P2WPKH; aggregator `sync()` through the daemon's RPC proxy | `0269994eb2fce274d43c534aa52f609035a5a1d1cbe0819f933027fc758281ce` |
-| `createVault` | 2-leaf P2TR (5-of-7 cooperative + CSV exit), quorum from `/tachi_validatorsPower`, **`csvBlocks=1` accepted** | vault A `bcrt1pnrud4…c99s`, vault B `bcrt1p45gf…y2h9` |
+| `createVault` | 2-leaf P2TR (5-of-7 cooperative + CSV exit), quorum from `/tachi_validatorsPower`; `csvBlocks=1` (test-only, see 5.5) | vault A `bcrt1pnrud4…c99s`, vault B `bcrt1p45gf…y2h9` |
 | `depositToVault` (L1) | 0.003 BTC into each vault | A `e4b6e9ec82e16e2ddcf70955c3473420c60edcae83f8987bc4e004a198f53dc4`, B `643a68dac299fb034f4ecc176be26eefc0c3bed1ee4a7fc17d37245703a8dce4` |
 | `registerVault` (`TxVaultOpen`) | committed, `code 0`; daemon lists the vaults `state: open` | A ledger tx `072484e7f7c01b3d1a5851313261ae62d067f4351365120317ce89b04df76166` → vaultId `e5f83fa6aa8c2635a3570010f4185e21d8c937d8be71b70f2009e18c6b21f1aa`; B vaultId `b74be6cc8abfeb7c51bd47b06b52025685171d14e36adec520e3c8e759c7a03e` |
-| **Unilateral exit** | `buildUnilateralExitPsbt` → **user signature only, no quorum** (3-item witness: sig, exit script, control block; `nSequence=1`) → **299 500 sats swept back to our P2WPKH, confirmed on L1** | `5bb2960bf27b6715228abe784a47bbb354b3aff3d7182e352fec882a7a67d0c3` |
-| **Cooperative refund** | `buildRefundPsbt` → user-signed → `POST /tachi_signTransaction` returned **5 partial signatures from 5 distinct validators** → 10-item witness (5 validator sigs + 2 empty slots + user sig + 274-byte script + control block) → **confirmed on L1** into the `to_local` commitment output | `b78cdb628a118fdb95090601914dedbaab4ba3c895432fbb10ea7bf25982f86b` |
+| **Unilateral exit** | `buildUnilateralExitPsbt` → **user signature only, no quorum** (3-item witness; `nSequence=1`) → **299 500 sats swept back to our P2WPKH, confirmed on L1** | `5bb2960bf27b6715228abe784a47bbb354b3aff3d7182e352fec882a7a67d0c3` |
+| **Cooperative refund** | `buildRefundPsbt` → user-signed → `POST /tachi_signTransaction` returned **5 partial signatures from 5 distinct validators** → 10-item witness → **confirmed on L1** into the `to_local` commitment output | `b78cdb628a118fdb95090601914dedbaab4ba3c895432fbb10ea7bf25982f86b` |
 
-Cost and time: **782 sats** of L1 fees for the deposit + exit round trip;
-**~30 minutes end to end** at regtest's fixed 10-minute block cadence with
-`csvBlocks=1` (the SDK default of 1008 blocks would be ~7 days). The daemon's
-watchtower (`mode: detection`) scanned the exit's block and recorded no
-receipt — correct, an exit-leaf spend is not a breach — but the vault record
-stays `open` afterwards.
+782 sats of L1 fees for the deposit + exit round trip; ~30 minutes end to end
+at regtest's fixed 10-minute cadence. **The funds exited were deposited from L1
+for the spike, not merchant receipts.**
 
-**Why `initiatePayout` is still simulated — precisely.** Registering a funded
-vault mints **no ledger VTXO**: after `TxVaultOpen` the vault address has
-`getLockedVtxos` empty and a ledger balance of 0; the vault's value is its L1
-funding UTXO. So there are **two separate value pools with no observed
-bridge**: the *vault pool* (L1 custody, exitable) and the *ledger-VTXO pool*
-(what merchants actually receive on invoices). A merchant can therefore exit
-only funds they first deposited into a vault **from L1** — not their sales.
-That, not time or SDK gaps, is what keeps payouts simulated: wiring the spike
-into `initiatePayout` today would demonstrate the mechanism on the merchant's
-own L1 deposit while leaving their receipts untouched. The adapter returns a
-`failed` payout carrying this explanation rather than pretending.
+### 5.2 Why the spike could only exit self-deposited funds
 
-`TxWithdraw` (wire type 5) exists in the daemon's tx types but the SDK ships no
-builder or semantics for it, so it cannot be implemented honestly client-side.
+`TxVaultOpen` registers an L1-funded vault **directly against an L1 outpoint**
+and never touches the ledger-VTXO pool (Tachi team, Telegram, Aug 2026). That
+is exactly what we observed: after registration the vault address had
+`getLockedVtxos` empty and a ledger balance of 0 — the vault's value *was* its
+L1 funding UTXO. Merchant receipts, by contrast, are plain-key ledger VTXOs.
+The step we did not know existed is **`TxLockForVault`** (5.3): it is what
+moves a ledger VTXO into vault custody. Our spike simply never used it.
 
-**On "on-the-fly" exit.** Our reading of the shipped surface remains that there
-is no direct ledger → L1 exit for plain-key VTXO holders; that reading is now
-matched by the team's own words:
+### 5.3 The three ledger → L1 paths (Tachi team, Telegram, Aug 2026, paraphrased)
 
-> "Yes, vault is the only vessel for the entry and exit. Regarding on-the-fly
-> exit from Tachi to Bitcoin L1, we don't have cryptographic support for it
-> just yet." — Tachi team, Telegram, Aug 2026
+1. **`TxVaultOpen`** — registers an L1-funded vault against an L1 outpoint.
+   Never touches ledger VTXOs. What the spike exercised.
+2. **`TxLockForVault` / `TxUnlockFromVault`** — **the ledger → vault bridge**:
+   lock an existing ledger VTXO under a vault address, or release it back. This
+   is the path for putting merchant-receipt VTXOs under vault custody, and thus
+   under the quorum-cosigned refund and unilateral-exit guarantees of 5.1.
+3. **`TxWithdraw`** (wire type 5) — a **plain ledger → L1 exit that needs no
+   vault**: any ledger VTXO, including merchant receipts, can offboard straight
+   to L1.
 
-The spike shows the **vault-based** exit does work; the two statements are
-consistent — the vault is the vessel, and what is missing is the on-the-fly
-(plain-key) path.
+Tachi's recommendation: `TxWithdraw` is the more direct fix for "real sales →
+real payout"; use `TxLockForVault` first only if you specifically want the
+quorum-cosigned / unilateral-exit guarantees on those funds.
 
-**Open questions for the Tachi team (current):**
+This retires the claim, made in earlier revisions of this file and echoed by an
+earlier Tachi message ("vault is the only vessel for the entry and exit …
+we don't have cryptographic support for [on-the-fly exit] just yet" — Tachi
+team, Telegram, Aug 2026), that no ledger → L1 path exists for plain-key VTXO
+holders. The later clarification supersedes it: the protocol has one
+(`TxWithdraw`), and a bridge into vault custody (`TxLockForVault`).
 
-1. **Is there, or will there be, a ledger → vault bridge?** Can ledger VTXOs
-   (invoice receipts) be moved into a vault's funding output — or otherwise
-   redeemed to L1 — without an L1 deposit? Answering this makes
-   `initiatePayout` roughly a **one-day job** on top of
-   [scripts/tachi-vault-spike.ts](scripts/tachi-vault-spike.ts).
-2. Should an observed exit-leaf spend transition the vault to a closed state on
-   the ledger (it currently stays `open`), and is there a `TxVaultClose` a
-   client should send?
-3. What CSV value is considered safe on signet/mainnet, given regtest accepted
-   `csvBlocks=1`?
+### 5.4 Why `initiatePayout` is still simulated — precisely
+
+**An SDK/tooling gap, not a protocol gap.** The shipped TypeScript SDK
+(`@tachibtc/taurus-vault-core` 0.3.3) exports the `TxWithdraw` type constant
+but provides **no builder and no documented payload semantics** for
+`TxWithdraw`, and nothing at all for `TxLockForVault` / `TxUnlockFromVault`.
+Every other ledger transaction we send (`TxDeposit`, `TxTransfer`,
+`TxVaultOpen`) has an SDK builder whose wire encoding we could verify against
+the daemon; hand-assembling an undocumented payload and broadcasting it would
+be guessing with real (test) money, so we don't. **We have asked Tachi for a
+payload reference or a Go-side builder to mirror.** Until then the adapter
+returns a `failed` payout carrying this explanation, and `ADAPTER_MODE=mock`
+demonstrates the payout/exit UX. With a builder in hand, `initiatePayout` is a
+short job: `TxWithdraw` slots straight into the adapter's existing
+build → sign → `broadcastTxSync` → assert `code 0` → wait-for-commit path.
+
+### 5.5 Also answered
+
+- **`TxVaultClose` (0x12) is defined but not wired.** The daemon's vault
+  `State` field is hardcoded `"open"` because the closing/closed/breaching
+  writer isn't implemented, and there is no client-side `TxVaultClose` to send.
+  This explains why vault A still reads `open` after its funding outpoint was
+  spent by our exit. **Track vault liveness from your own L1 observation of the
+  exit-leaf spend, not from the daemon's reported state.** (Tachi team, Telegram, Aug 2026.)
+- **CSV.** There is no protocol minimum beyond `> 0` and `<= 65535`. Our
+  `csvBlocks=1` was accepted only because nothing stops it — **"not a signal
+  it's safe."** **1008 blocks (~7 days) is the conventional default**; the real
+  lower bound should be derived from the operator's own monitoring latency
+  (how fast you would notice and react to a stale-state broadcast). Treat the
+  spike's `csvBlocks=1` as test-only. (Tachi team, Telegram, Aug 2026.)
+- **Self-signed deposits (former open question #2).** Accepted on **both regtest
+  and signet**; the L1 verification gate is **mainnet-only**, where each
+  validator independently verifies the claimed deposit against its own
+  `bitcoind` (amount and block height/timestamp must match exactly), signs an
+  attestation, and the deposit finalizes once attestations clear a threshold.
+  So `scripts/tachi-fund.ts` is legitimate testnet behavior, a signet
+  deployment is feasible with the current funding approach, and a mainnet
+  adapter must wait for attestation — not `code 0` — before crediting (see GAPS.md).
+
+### 5.6 Still open
+
+1. **SDK builder / payload reference for `TxWithdraw` and `TxLockForVault` /
+   `TxUnlockFromVault`** — the only thing between OpenTill's receipts and a real
+   payout (asked; awaiting a reference or a Go-side builder to mirror).
+2. Carried from OpenSluice, tracked here for completeness: delegated LP custody
+   semantics; the meaning of broadcast `code=5`; nonce behavior (we observed the
+   account nonce staying at 0 after committed txs — the adapter always reads
+   `getAccountNonce` before signing and never assumes increments).
 
 Smaller caveats: fees are the daemon's `min_fee_sat` (1 sat on regtest); a
 refund needs a *single* key holding `amount + fee` (fund the till); on-chain
-balance via `scantxoutset` is a full-UTXO-set scan and is cached for 60 s; the
-regtest daemon accepts a self-signed `TxDeposit` with no L1 backing (how ledger
-value enters outside regtest is presumably vault deposit only — unverified).
+balance via `scantxoutset` is a full-UTXO-set scan and is cached for 60 s.
 
 ## 6. Running it
 
@@ -191,7 +231,8 @@ TACHI_MNEMONIC="…"
 TACHI_NETWORK=regtest              # or signet + TACHI_RPC_URL=https://rpc-signet.tachibtc.com
 
 # 3) fund the till key once (its address is in the boot log) with a ledger transfer and go
-#    (regtest only: scripts/tachi-smoke.ts mints a self-signed ledger deposit; the L1 faucet does NOT credit the ledger)
+#    (regtest/signet: scripts/tachi-fund.ts mints a self-signed ledger deposit — sanctioned testnet behavior,
+#     L1 verification is mainnet-only; the L1 faucet does NOT credit the ledger)
 npm run dev                        # logs: tachi: connected {chainId, height, tillAddress}
 ```
 

@@ -2754,3 +2754,22 @@ Fees paid on L1 for the whole A round trip: 282 (faucet) + 782 (deposit + exit) 
 ## Verdict: wire it in, or keep payouts simulated?
 
 **Keep payouts simulated in the product for now — but ship this spike as the proof.** The exit and the cooperative refund are real and reproducible (`npm run spike:vault`), which is exactly the video moment and the honest counter to "it's all mock." What is *not* real is the connection to money OpenTill actually holds: invoice receipts live as ledger VTXOs, and nothing observed today moves them into a vault. Wiring the vault flow into `initiatePayout` would therefore let a merchant exit *only* funds they first deposited from L1 — a demo of the mechanism, not a payout of their sales. The honest product statement stays: receiving, confirmation and refunds are real; payouts await answer #1. The moment Tachi provides a ledger→vault (or ledger→L1) bridge, the adapter's `initiatePayout` is a ~1-day job on top of this script.
+
+---
+
+# Postscript (Tachi's answers, Aug 2026)
+
+The assessment above was written before Tachi answered our questions; read it
+with these corrections (details in INTEGRATION.md §5):
+
+- **Question 1 (bridge) — answered.** `TxVaultOpen` binds an L1 outpoint and
+  never touches ledger VTXOs — exactly why this spike could only exit funds it
+  deposited itself. **`TxLockForVault` / `TxUnlockFromVault` are the ledger →
+  vault bridge**, and **`TxWithdraw` is a plain ledger → L1 exit that needs no
+  vault** (their recommended route for real sales → real payout). "No bridge
+  exists" was wrong; what's missing is an SDK builder for those transactions.
+- **Question 2 (`TxVaultClose`) — answered.** Defined but not wired; the vault
+  `State` is hardcoded `"open"`. Track liveness from your own L1 observation.
+- **Question 3 (CSV) — answered.** No minimum beyond `0 < csv <= 65535`;
+  `csvBlocks=1` was accepted because nothing stops it — not a safety signal.
+  Use 1008 by default; derive the real floor from monitoring latency.
