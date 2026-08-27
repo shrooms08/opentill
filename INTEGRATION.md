@@ -216,33 +216,82 @@ to copy:
   the raw bytes in `PSBTPayload`.
 
 `TxUnlockFromVault` is the corresponding release path. `npm run spike:lock` is
-our attempt at this; results will land in
-[docs/tachi-lock-spike.md](docs/tachi-lock-spike.md).
+our attempt at this — result in 5.3d.
+
+### 5.3d Lock spike result: blocked on an unnamed post-signature rule
+
+Run 2026-08-26 on `tachi-regtest-1`, full transcript in
+[docs/tachi-lock-spike.md](docs/tachi-lock-spike.md). Everything *around* the
+lock step ran for real:
+
+| Step | Result | Evidence |
+| --- | --- | --- |
+| merchant receipt | a customer key paid the merchant key 50 000 sats by plain ledger transfer, exactly as an invoice payment does | receipt VTXO `0de9e7ddc71c9aa924e3672e0251c2b69c890b56c33d9c118b4b1c28af7f7e2c` |
+| vault for that key | `createVault` → L1 deposit `68b21f0e7a536cbb0d198e97a6cad7afeec0112787cbc8b72088e935c716be16` → `registerVault` committed `code 0` | vaultId `24e194845463f1940f5427507190697bf2bffea648f1c3ebd2d4686391f06adb` |
+| **`TxLockForVault`** | **rejected — 15 distinct conforming shapes, every one `code 12 invalid transaction format`**; the receipt VTXO is untouched | §3–§3c of the transcript |
+| lock verify / exit / cooperative | not reached | — |
+
+What the daemon actually does, established by a bogus-signature probe (a shape
+that passes the format layer fails *later* with `code 3 invalid signature`,
+so the checks separate):
+
+- **`Outputs` must be non-empty.** `outputs=[]` is rejected `code 12` *before*
+  signature verification — the generic format check, as suspected in 5.3c. A
+  zero-value placeholder does not help.
+- **With non-empty outputs the lock envelope passes the generic format check**
+  (bogus signature → `invalid signature`), and `/tachi_txDecode` parses it as
+  `type: "lock"` with correct vin/vout — the SDK's transfer wire layout is fine
+  for `0x06`.
+- **With a valid signature the identical shape is rejected `code 12` again**: a
+  **lock-specific validation that runs after signature verification reuses the
+  format error code**. Nothing the stated contract allows changes it — PSBT
+  unfinalized / genuinely finalized (real input with `finalScriptWitness`,
+  exactly one P2TR output paying the vault's own address) / absent; PSBT output
+  value equal to the VTXO amount, amount − fee, or less; ledger output to the
+  owner or to the vault's taproot key; ledger fee 1 or 0; input `txid` zero, or
+  the funding txid in internal or display byte order.
+- **`/tachi_txValidate` is not evidence.** It rejects *valid, routinely
+  committed* transfers with `input 0 sigscript: need 16705 bytes` — a decoder
+  bug on that endpoint (the README's "false negatives", now characterised).
+- Side findings: types `5` (`withdraw`) and `7` (decodes as `unlock`) pass the
+  generic format check with the plain transfer shape; type `2` does not.
+
+So at least one requirement of `TxLockForVault` is not in the contract we were
+given, and `code 12` is the only signal the daemon exposes for it. **Blocked
+pending Tachi's post-signature validation rules for `0x06`, or a byte-exact
+example that commits on regtest.** The vaults and the untouched receipt remain
+on regtest; `npm run spike:lock` resumes at the lock step.
 
 ### 5.4 Why `initiatePayout` is still simulated — precisely
 
-**An SDK/tooling gap, not a protocol gap.** The shipped TypeScript SDK
-(`@tachibtc/taurus-vault-core` 0.3.3) provides **no builder for
-`TxLockForVault` / `TxUnlockFromVault`**. Every other ledger transaction we send
-(`TxDeposit`, `TxTransfer`, `TxVaultOpen`) has an SDK builder whose wire
-encoding we could verify against the daemon; hand-assembling an undocumented
-payload and broadcasting it would be guessing with real (test) money, so we
-don't.
+**The gap is one transaction type plus one design answer.** Everything around
+the lock step is proven on regtest: receiving, transfer and refund on the
+ledger; `TxVaultOpen`; the 5-of-7 quorum-cosigned cooperative refund; the
+user-only unilateral exit. The join — `TxLockForVault` — has a stated contract
+(5.3c) but an unnamed post-signature rule rejects every conforming shape
+(5.3d), and the shipped TypeScript SDK provides no builder for it to mirror.
+Hand-assembling more variants is guessing with (test) money against an opaque
+`code 12`, so we stop here rather than pretend.
 
-That caution is now vindicated rather than merely prudent. The SDK also exports
-a `TxWithdraw` type constant, and Tachi initially pointed us at it as the
-simpler vault-free exit — but the type is unimplemented (5.3b), so building on
-it would have produced a payout that committed and moved nothing. Refusing to
-guess at a payload is what kept that out of the product.
+The same caution is what kept `TxWithdraw` out of the product: Tachi first
+pointed us at it, then found at source level that it is unimplemented beyond
+generic format checks (5.3b) — a payout built on it would commit and move
+nothing to L1 while looking like a success.
 
-`TxLockForVault` is a different case: its contract **is** specified (5.3c), so
-it needs building and verifying rather than waiting on Tachi. `npm run
-spike:lock` is that work. Until it lands the adapter returns a `failed` payout
-carrying this explanation, and `ADAPTER_MODE=mock` demonstrates the payout/exit
-UX. Once the lock step is proven, `initiatePayout` becomes two stages on the
-adapter's existing build → sign → `broadcastTxSync` → assert `code 0` →
-wait-for-commit path: lock the receipt VTXO into the vault, then run the exit
-that 5.1 already proved.
+Until the lock rule is known the adapter returns a `failed` payout carrying
+this explanation, and `ADAPTER_MODE=mock` demonstrates the payout/exit UX.
+When it lands, `initiatePayout` is two stages on the adapter's existing
+build → sign → `broadcastTxSync` → assert `code 0` → wait-for-commit path:
+lock the receipt VTXO into the vault, then run the cooperative refund 5.1
+already proved (unilateral exit stays the sovereignty backstop) — roughly a
+day, since `scripts/tachi-lock-spike.ts` already contains every other step.
+
+The **design answer** still needed even then: the L1 value that leaves a vault
+is its **funding UTXO** (what was deposited from L1). What backs the L1 payout
+of a *locked receipt* — the vault's own funding, meaning the merchant pre-funds
+their exits with L1 collateral, or network liquidity drawn on by the
+quorum-cosigned refund? That decides whether "sales → payout" is real without
+merchant pre-funding, and no spike can answer it.
 
 ### 5.5 Also answered
 
@@ -269,16 +318,22 @@ that 5.1 already proved.
 
 ### 5.6 Still open
 
-1. **SDK builder for `TxLockForVault` / `TxUnlockFromVault`** — the only thing
-   between OpenTill's receipts and a real payout. Unlike the retracted
-   `TxWithdraw` ask, this is not blocked on Tachi: the wire contract is specified
-   (5.3c) and the exit on the far side is proven (5.1), so it is ours to build
-   and verify (`npm run spike:lock`). *(The earlier ask — a payload reference for
-   `TxWithdraw` — is closed: there is nothing to reference, because the type is
-   unimplemented.)*
-2. Carried from OpenSluice, tracked here for completeness: delegated LP custody
-   semantics; the meaning of broadcast `code=5`; nonce behavior (we observed the
-   account nonce staying at 0 after committed txs — the adapter always reads
+1. **`TxLockForVault` post-signature validation rules** — what the daemon
+   checks after the signature for `0x06`, ideally as a byte-exact example that
+   commits on regtest (or the Go-side builder), plus a distinct error code/log
+   so the check is not reported as `invalid transaction format`. Sub-questions:
+   must the PSBT spend the vault funding through the **cooperative** leaf
+   (quorum signatures inside the payload) rather than a user-signed exit-leaf
+   self-spend; must its single output value equal the VTXO amount; what should
+   the non-empty `Outputs` contain?
+2. **What backs a locked receipt's L1 payout** — the vault's own funding UTXO
+   (merchant pre-funds) or network liquidity? Determines whether payouts of
+   sales work without L1 collateral (5.4).
+3. `/tachi_txValidate` rejects valid transfers (`input 0 sigscript: need
+   16705 bytes`) — decoder bug on that endpoint.
+4. Carried from OpenSluice, tracked here for completeness: delegated LP custody
+   semantics; the meaning of broadcast `code=5`; nonce behavior (the account
+   nonce stays at 0 after committed txs — the adapter always reads
    `getAccountNonce` before signing and never assumes increments).
 
 Smaller caveats: fees are the daemon's `min_fee_sat` (1 sat on regtest); a

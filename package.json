@@ -22,7 +22,8 @@
     "e2e:tachi": "tsx scripts/tachi-e2e.ts",
     "fund:tachi": "tsx scripts/tachi-fund.ts",
     "pay:tachi": "tsx scripts/tachi-pay.ts",
-    "spike:vault": "tsx scripts/tachi-vault-spike.ts"
+    "spike:vault": "tsx scripts/tachi-vault-spike.ts",
+    "spike:lock": "tsx scripts/tachi-lock-spike.ts"
   },
   "devDependencies": {
     "@bitcoinerlab/secp256k1": "^1.2.0",

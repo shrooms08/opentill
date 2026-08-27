@@ -16,23 +16,26 @@ Fixed items stay listed with the gate that closed them.
 
 ## Open — real (tachi) mode
 
-- **No L1 payouts in real mode — SDK builders missing, not protocol.** The
-  Taurus vault path (create → L1 deposit → register → unilateral exit
-  `5bb2960b…d0c3` / 5-of-7 co-signed refund `b78cdb62…f86b`) ran for real on
-  regtest (`npm run spike:vault`). Tachi confirms the missing pieces exist on
-  the protocol: `TxLockForVault`/`TxUnlockFromVault`, the ledger→vault bridge
-  (`TxVaultOpen` alone never touches ledger VTXOs, which is why the spike could
-  only exit self-deposited funds). Tachi first pointed us at `TxWithdraw` as a
-  simpler vault-free exit, then inspected their source and retracted it: the type
-  is **unimplemented** beyond generic format checks — no L1 broadcast, no
-  destination semantics — so a payout built on it would commit and move nothing
-  while appearing to succeed. The shipped TS SDK has no builder for
-  `TxLockForVault`, but its wire contract is now specified (finalized PSBT with
-  exactly one P2TR output in `PSBTPayload`), so it is ours to build and verify
-  rather than blocked on Tachi — `npm run spike:lock`.
-  `initiatePayout` therefore returns a `failed` payout with that reason; the
-  mock keeps demonstrating the UX. With a builder, wiring is a short job on the
-  adapter's existing build → sign → broadcast → assert `code 0` → commit path.
+- **No L1 payouts in real mode — one transaction type plus one design answer.**
+  Everything around the lock step is proven on regtest: ledger receive/transfer/
+  refund, `TxVaultOpen`, the 5-of-7 co-signed cooperative refund
+  (`b78cdb62…f86b`) and the user-only unilateral exit (`5bb2960b…d0c3`)
+  (`npm run spike:vault`). The join — `TxLockForVault`, the ledger→vault
+  bridge for merchant-receipt VTXOs — is **blocked**: 15 conforming shapes were
+  rejected with `code 12` by a post-signature rule the daemon does not name
+  (`npm run spike:lock`, docs/tachi-lock-spike.md); a bogus-signature probe
+  showed `Outputs` must be non-empty and that the envelope otherwise passes the
+  generic format check, and `/tachi_txDecode` parses it as `lock`. Pending
+  Tachi's post-signature rules or a byte-exact example. `TxWithdraw` is not an
+  alternative — Tachi found it unimplemented beyond format checks (a payout on
+  it would commit and move nothing). Open design question even after the lock
+  works: whether a locked receipt's L1 payout is backed by the vault's own
+  funding (merchant pre-funds) or network liquidity. `initiatePayout` returns a
+  `failed` payout with this reason; the mock keeps demonstrating the UX. With
+  the lock rule known, wiring is ~a day on the adapter's existing
+  build → sign → broadcast → assert `code 0` → commit path.
+- **`/tachi_txValidate` is unusable** — rejects valid transfers with a decoder
+  error; only broadcast verdicts count.
 - **Vault liveness must be self-observed.** `TxVaultClose` is defined but not
   wired; the daemon reports every vault as `"open"` forever. A real-mode payout
   feature must detect exit-leaf spends from its own L1 observation.
