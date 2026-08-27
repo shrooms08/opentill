@@ -16,33 +16,25 @@ Fixed items stay listed with the gate that closed them.
 
 ## Open — real (tachi) mode
 
-- **No L1 payouts in real mode — one transaction type plus one design answer.**
-  Everything around the lock step is proven on regtest: ledger receive/transfer/
-  refund, `TxVaultOpen`, the 5-of-7 co-signed cooperative refund
-  (`b78cdb62…f86b`) and the user-only unilateral exit (`5bb2960b…d0c3`)
-  (`npm run spike:vault`). The join — `TxLockForVault`, the ledger→vault
-  bridge for merchant-receipt VTXOs — is **blocked**: 15 conforming shapes were
-  rejected with `code 12` by a post-signature rule the daemon does not name
-  (`npm run spike:lock`, docs/tachi-lock-spike.md); a bogus-signature probe
-  showed `Outputs` must be non-empty and that the envelope otherwise passes the
-  generic format check, and `/tachi_txDecode` parses it as `lock`. Pending
-  Tachi's post-signature rules or a byte-exact example. `TxWithdraw` is not an
-  alternative — Tachi found it unimplemented beyond format checks (a payout on
-  it would commit and move nothing). Open design question even after the lock
-  works: whether a locked receipt's L1 payout is backed by the vault's own
-  funding (merchant pre-funds) or network liquidity. `initiatePayout` returns a
-  `failed` payout with this reason; the mock keeps demonstrating the UX. With
-  the lock rule known, wiring is ~a day on the adapter's existing
-  build → sign → broadcast → assert `code 0` → commit path.
-- **`/tachi_txValidate` is unusable** — rejects valid transfers with a decoder
-  error; only broadcast verdicts count.
-- **Vault liveness must be self-observed.** `TxVaultClose` is defined but not
-  wired; the daemon reports every vault as `"open"` forever. A real-mode payout
-  feature must detect exit-leaf spends from its own L1 observation.
-- **CSV default must be 1008, not the spike's 1.** No protocol minimum exists;
-  `csvBlocks=1` was accepted only because nothing stops it. A product default
-  of 1008 blocks (~7 days) is conventional; the true lower bound is the
-  operator's monitoring latency.
+- **No L1 payouts in real mode — the protocol has no ledger→L1 path for
+  receipts today.** Tachi traced every candidate in source (INTEGRATION.md
+  §5.3b/5.3e/5.4): `TxWithdraw` has no handler; `TxLockForVault`/`TxUnlockFromVault`
+  only flip a `Locked` flag on a VTXO after parsing the PSBT for the vault
+  address — no L1 activity; nothing pays out on L1 against a locked VTXO —
+  "a real gap, not a hidden design choice." The vault exits we proved
+  (`5bb2960b…d0c3` unilateral, `b78cdb62…f86b` co-signed) move a vault's own
+  L1 funding UTXO, which is why they only worked for self-deposited funds;
+  locking a receipt would create no L1 value to exit. Not an SDK-builder gap,
+  not ours. `initiatePayout` returns a `failed` payout with this reason; the
+  mock demonstrates the intended UX. Unblocked only by Tachi shipping
+  ledger→L1 offboarding, at which point the adapter's existing broadcast path
+  and the proven vault exits are the pieces it slots into.
+- **Reference for whoever wires the lock later** (INTEGRATION.md §5.3e):
+  `code 12` after signature = cross-check of TachiTx fields against the parsed
+  PSBT (input count, per-input txid/vout, output count, byte-exact output
+  amounts); `Outputs` non-empty with `Amount > 0` equal to the PSBT output,
+  `Owner` = the VTXO's existing x-only owner; no cooperative-leaf or
+  value-equals-VTXO requirement.
 - **Refund needs one key holding `amount + fee`.** A TachiTx has a single
   signer, so funds can't be combined across keys in one send. An invoice key
   holds exactly its amount, so refunds are paid from the till key — keep it

@@ -193,7 +193,9 @@ So the route from merchant receipts to L1 is **not** `TxWithdraw`. It is:
 > (`5bb2960bf27b6715228abe784a47bbb354b3aff3d7182e352fec882a7a67d0c3`) as the
 > sovereignty backstop.
 
-Both halves of that exit already work. `TxLockForVault` is the join.
+Both halves of that exit already work. `TxLockForVault` was assumed to be the
+join — 5.3e shows it is a ledger-side flag with no L1 effect, so this route
+does not pay receipts out either. See 5.4.
 
 ### 5.3c `TxLockForVault` (0x06) — the wire contract
 
@@ -256,42 +258,72 @@ so the checks separate):
 - Side findings: types `5` (`withdraw`) and `7` (decodes as `unlock`) pass the
   generic format check with the plain transfer shape; type `2` does not.
 
-So at least one requirement of `TxLockForVault` is not in the contract we were
-given, and `code 12` is the only signal the daemon exposes for it. **Blocked
-pending Tachi's post-signature validation rules for `0x06`, or a byte-exact
-example that commits on regtest.** The vaults and the untouched receipt remain
-on regtest; `npm run spike:lock` resumes at the lock step.
+So at least one requirement of `TxLockForVault` was not in the contract we were
+given, and `code 12` was the only signal the daemon exposed for it. Tachi then
+traced the path in source — 5.3e has the rules, and 5.4 has the conclusion that
+makes them moot for payouts.
+
+### 5.3e What `TxLockForVault` actually does (Tachi team, Telegram, Aug 2026, source-traced)
+
+Tachi read the full lock/unlock path in their daemon and answered both what the
+rejections were and what a successful lock would have meant:
+
+- **`TxLockForVault` only parses the PSBT to extract the vault address for
+  bookkeeping and flips a `Locked` flag on the VTXO. It never broadcasts
+  anything to Bitcoin.** `TxUnlockFromVault` is the exact mirror — also no L1
+  activity. `TxWithdraw` has no special-case handler at all (5.3b). Locking is
+  purely an **off-chain, ledger-side hold**.
+- Therefore **there is no daemon-side mechanism today that pays anything out on
+  L1 against a locked VTXO.** In their words: *"a real gap, not a hidden design
+  choice."*
+
+For whoever picks this up once that gap is closed, the validation rules we hit
+(the reason for every `code 12` in 5.3d):
+
+- `code 12` is reused for a **post-signature cross-check of the TachiTx fields
+  against the parsed PSBT**: same input count; same `txid`/`vout` per input;
+  same output count; **byte-exact output amounts**.
+- Neither cooperative-leaf signing nor output-value equality to the VTXO amount
+  is enforced.
+- A lock's `Outputs` must be non-empty with **`Amount > 0` matching the PSBT
+  output exactly**, and `Owner` a 32-byte x-only key — not cross-checked for
+  locks; set it to the VTXO's existing owner.
+- `/tachi_txValidate`: Tachi believes the hex we validated differed from what
+  we broadcast; unresolved on both sides. Treat **broadcast verdicts as the
+  only truth**.
+
+The spike's vaults and the untouched receipt remain on regtest, but there is no
+reason to resume `npm run spike:lock`: a committed lock would flip a flag and
+create no L1 value to exit.
 
 ### 5.4 Why `initiatePayout` is still simulated — precisely
 
-**The gap is one transaction type plus one design answer.** Everything around
-the lock step is proven on regtest: receiving, transfer and refund on the
-ledger; `TxVaultOpen`; the 5-of-7 quorum-cosigned cooperative refund; the
-user-only unilateral exit. The join — `TxLockForVault` — has a stated contract
-(5.3c) but an unnamed post-signature rule rejects every conforming shape
-(5.3d), and the shipped TypeScript SDK provides no builder for it to mirror.
-Hand-assembling more variants is guessing with (test) money against an opaque
-`code 12`, so we stop here rather than pretend.
+**Because the ledger → L1 path for merchant receipts does not exist in the
+protocol today, by any route.** Not a missing SDK builder, not a gap in our
+implementation. Tachi traced every candidate in source (5.3b, 5.3e):
 
-The same caution is what kept `TxWithdraw` out of the product: Tachi first
-pointed us at it, then found at source level that it is unimplemented beyond
-generic format checks (5.3b) — a payout built on it would commit and move
-nothing to L1 while looking like a success.
+- `TxWithdraw` — no handler; a "payout" on it commits and moves nothing.
+- `TxLockForVault` / `TxUnlockFromVault` — an off-chain hold: parse the PSBT for
+  the vault address, flip a `Locked` flag, mirror it back. No L1 activity.
+- There is **no daemon-side mechanism that pays anything out on L1 against a
+  locked VTXO** — "a real gap, not a hidden design choice."
 
-Until the lock rule is known the adapter returns a `failed` payout carrying
-this explanation, and `ADAPTER_MODE=mock` demonstrates the payout/exit UX.
-When it lands, `initiatePayout` is two stages on the adapter's existing
-build → sign → `broadcastTxSync` → assert `code 0` → wait-for-commit path:
-lock the receipt VTXO into the vault, then run the cooperative refund 5.1
-already proved (unilateral exit stays the sovereignty backstop) — roughly a
-day, since `scripts/tachi-lock-spike.ts` already contains every other step.
+This also explains the first vault spike (5.1) exactly: the unilateral exit and
+the cooperative refund we proved on L1 move **a vault's own L1 funding UTXO** —
+the coins deposited from L1 at `depositToVault`. That is why they only ever
+worked for self-deposited funds. Locking a merchant receipt into that vault
+would not have created any L1 value to exit; the exit would still have moved
+only the deposit.
 
-The **design answer** still needed even then: the L1 value that leaves a vault
-is its **funding UTXO** (what was deposited from L1). What backs the L1 payout
-of a *locked receipt* — the vault's own funding, meaning the merchant pre-funds
-their exits with L1 collateral, or network liquidity drawn on by the
-quorum-cosigned refund? That decides whether "sales → payout" is real without
-merchant pre-funding, and no spike can answer it.
+What *is* real, and stays real: receiving, confirmation and refunds on the
+ledger (`ADAPTER_MODE=tachi`, 5.1–5.3), and the vault's own L1 exits for funds a
+merchant deposits from L1 themselves. What OpenTill therefore does:
+`initiatePayout` in real mode returns a `failed` payout carrying this
+explanation, and `ADAPTER_MODE=mock` demonstrates the payout/exit UX the product
+is designed around. When Tachi ships ledger → L1 offboarding, the adapter's
+existing build → sign → `broadcastTxSync` → assert `code 0` → wait-for-commit
+path and the proven vault exits are the pieces it slots into; until then no
+amount of client work changes the outcome.
 
 ### 5.5 Also answered
 
@@ -318,23 +350,13 @@ merchant pre-funding, and no spike can answer it.
 
 ### 5.6 Still open
 
-1. **`TxLockForVault` post-signature validation rules** — what the daemon
-   checks after the signature for `0x06`, ideally as a byte-exact example that
-   commits on regtest (or the Go-side builder), plus a distinct error code/log
-   so the check is not reported as `invalid transaction format`. Sub-questions:
-   must the PSBT spend the vault funding through the **cooperative** leaf
-   (quorum signatures inside the payload) rather than a user-signed exit-leaf
-   self-spend; must its single output value equal the VTXO amount; what should
-   the non-empty `Outputs` contain?
-2. **What backs a locked receipt's L1 payout** — the vault's own funding UTXO
-   (merchant pre-funds) or network liquidity? Determines whether payouts of
-   sales work without L1 collateral (5.4).
-3. `/tachi_txValidate` rejects valid transfers (`input 0 sigscript: need
-   16705 bytes`) — decoder bug on that endpoint.
-4. Carried from OpenSluice, tracked here for completeness: delegated LP custody
-   semantics; the meaning of broadcast `code=5`; nonce behavior (the account
-   nonce stays at 0 after committed txs — the adapter always reads
-   `getAccountNonce` before signing and never assumes increments).
+**One item: will Tachi implement ledger → L1 offboarding for VTXO holders?**
+That — and only that — unblocks real merchant payouts (5.4). Every
+lock-related question (post-signature rules, PSBT leaf, output values,
+`Outputs` contents) is closed by 5.3e; the `/tachi_txValidate` discrepancy is
+noted there as unresolved but immaterial (broadcast verdicts are the truth).
+Items carried from OpenSluice (delegated LP custody, broadcast `code=5`, nonce
+behavior) are tracked in that project.
 
 Smaller caveats: fees are the daemon's `min_fee_sat` (1 sat on regtest); a
 refund needs a *single* key holding `amount + fee` (fund the till); on-chain
