@@ -427,6 +427,8 @@ SQLite via `better-sqlite3` in WAL mode, no ORM — hand-written SQL in [package
 
 ## Payouts: two ways out of the vault
 
+> **Scope note.** This section describes the product design and the lifecycle `ADAPTER_MODE=mock` implements in full. In real mode both paths are proven on regtest for a vault's own L1 deposit, but the protocol has **no ledger→L1 path for merchant receipts yet**, so `initiatePayout` returns a `failed` payout — see [INTEGRATION.md](INTEGRATION.md) §5.
+
 Funds live off-chain in a vault backed by real on-chain Bitcoin. OpenTill exposes both paths out, honestly, side by side:
 
 - **Cooperative withdrawal** — the Tachi validator quorum co-signs the transaction. Fast (seconds to minutes), any amount up to your off-chain balance. This is the normal path. Lifecycle: `initiated → broadcasting → settled`.

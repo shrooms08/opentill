@@ -175,6 +175,14 @@
   min-width: 0;
 }
 
+/* Square guard: width comes from the fixed size (ui.css / the desktop override)
+   and height follows it. A fixed height beside max-width:100% turned any
+   width clamp into a tall strip. */
+.ck-qr-wrap .ot-qr img {
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
 .ck-partial ~ .ck-qr-wrap {
   margin-top: 16px;
 }
@@ -491,7 +499,9 @@
     box-shadow: var(--ot-card-shadow-lg);
     padding: 32px 36px;
     display: grid;
-    grid-template-columns: 1fr auto;
+    /* minmax(0, …): the text column never claims the QR's width. A nowrap
+       64-char Tachi address has a ~450px min-content that a bare 1fr honors. */
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "head head"
       "amount qr"
@@ -521,14 +531,19 @@
     grid-area: qr;
     align-self: center;
     margin-top: 22px;
+    /* The QR column is incompressible: min-width:auto plus max-width:none
+       on the img gives the track a 248px min-content instead of ~0. */
+    min-width: auto;
   }
   .ck-root.is-wide .ck-qr-wrap .ot-qr {
     padding: 14px;
     min-height: calc(248px + 28px + 5px);
+    flex-shrink: 0;
   }
   .ck-root.is-wide .ck-qr-wrap .ot-qr img {
     width: 248px;
-    height: 248px;
+    height: auto;
+    max-width: none;
   }
   .ck-root.is-wide .ck-addr {
     grid-area: addr;

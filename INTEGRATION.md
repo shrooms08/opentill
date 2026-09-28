@@ -8,10 +8,11 @@ mock adapter remains the test/demo/CI adapter; `ADAPTER_MODE=tachi` selects
 the real one behind the same `TachiAdapter` interface.
 
 What is **not** implemented in real mode: **payouts to L1** — cooperative
-withdrawal and unilateral exit. The route exists — lock a receipt VTXO into a
-vault with `TxLockForVault`, then take the vault exit this repo has already
-driven for real on L1 — but the shipped SDK has no builder for the lock step.
-§5 has the verified vault exit, the corrected path, and exactly what is missing.
+withdrawal and unilateral exit. The vault's own exits are proven on regtest
+(5.1), but Tachi has confirmed at source level that the protocol has **no
+ledger → L1 path for merchant receipts today** — `TxWithdraw` has no handler and
+`TxLockForVault` is an off-chain hold (5.3e). §5 has the verified exits, the
+source-traced verdicts, and the one thing that unblocks real payouts (5.6).
 
 Ground truth for every claim here: [`docs/tachi-smoke-output.md`](docs/tachi-smoke-output.md)
 (verbatim daemon responses) and [`docs/tachi-e2e-output.md`](docs/tachi-e2e-output.md)
@@ -114,7 +115,7 @@ E2E (`npm run e2e:tachi`, gateway booted in-process with `ADAPTER_MODE=tachi`):
 - balances: merchant 44 999 → 39 998 (till 39 999 → 34 998, invoice key 5 000);
   customer 10 000 → 4 999 → 9 999
 
-## 5. Payouts: every path exists on the protocol — the gap is SDK tooling
+## 5. Payouts: the vault exit is proven, but the protocol has no ledger → L1 path for receipts
 
 ### 5.1 What ran for real (vault path, `npm run spike:vault`)
 

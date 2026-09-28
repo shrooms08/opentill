@@ -1,8 +1,17 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { CheckoutState, deriveView } from "../src/shared/CheckoutState";
 import type { PublicInvoice } from "../src/shared/types";
+
+// No canvas here, so the real encoder never resolves and the <img> never
+// mounts. A stub data URL lets the QR sizing test see the actual element.
+vi.mock("qrcode", () => ({
+  default: { toDataURL: () => Promise.resolve("data:image/png;base64,iVBORw0KGgo=") },
+}));
 
 const NOW = 1_770_000_000_000;
 
@@ -211,6 +220,97 @@ describe("QR block sizing per state (class-level; pixel truth needs human eyes)"
     const qr = container.querySelector(".ot-qr");
     expect(qr).not.toBeNull();
     expect(qr!.classList.contains("is-compact")).toBe(true);
+  });
+
+  // Regression: a 64-char Tachi address widened the text column, the grid
+  // clamped the QR's width via max-width:100%, and the fixed height stayed:
+  // a 32×248 strip at desktop. happy-dom doesn't cascade these stylesheets, so
+  // resolve the real rules against the rendered <img> here (specificity +
+  // source order + min/max-width media) and check the result per viewport.
+  it("pending QR img stays square at every viewport (width and height from one size)", async () => {
+    const tachi = "bcrt1p" + "q7x3k9m2v8d4f6h0j5n1s3w7e9r2t4y6u8i0o2p4a6s8d0f2g4h6j8k0l2";
+    const { container } = render(
+      <CheckoutState invoice={{ ...base, address: tachi, paymentUri: `bitcoin:${tachi}` }} notFound={false} />,
+    );
+    const img = await waitFor(() => {
+      const el = container.querySelector(".ck-root.is-wide .ck-qr-wrap .ot-qr img");
+      if (!el) throw new Error("QR img not mounted");
+      return el;
+    });
+    const card = container.querySelector(".ck-card")!;
+
+    // Path from a string, not new URL(): under happy-dom the global URL isn't
+    // Node's, and readFileSync silently read this test file instead.
+    const shared = join(dirname(fileURLToPath(import.meta.url)), "../src/shared");
+    const css = ["ui.css", "checkout.css"]
+      .map((f) => readFileSync(join(shared, f), "utf8"))
+      .join("\n")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    type Rule = { media: string | null; selectors: string[]; decls: Record<string, string> };
+    const rules: Rule[] = [];
+    const parse = (src: string, media: string | null) => {
+      let i = 0;
+      while (i < src.length) {
+        const open = src.indexOf("{", i);
+        if (open < 0) break;
+        const head = src.slice(i, open).trim();
+        let depth = 1;
+        let close = open + 1;
+        for (; depth > 0; close++) {
+          if (close >= src.length) throw new Error(`unbalanced braces after "${head}"`);
+          depth += src[close] === "{" ? 1 : src[close] === "}" ? -1 : 0;
+        }
+        const body = src.slice(open + 1, close - 1);
+        if (head.startsWith("@media")) parse(body, head.slice(6).trim());
+        else if (!head.startsWith("@")) {
+          const decls: Record<string, string> = {};
+          for (const d of body.split(";")) {
+            const c = d.indexOf(":");
+            if (c > 0) decls[d.slice(0, c).trim()] = d.slice(c + 1).trim();
+          }
+          rules.push({ media, selectors: head.split(",").map((s) => s.trim()), decls });
+        }
+        i = close;
+      }
+    };
+    parse(css, null);
+
+    const specificity = (sel: string) =>
+      (sel.match(/#[\w-]+/g)?.length ?? 0) * 1e4 +
+      (sel.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g)?.length ?? 0) * 100 +
+      (sel.match(/(^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0);
+    const mediaMatches = (m: string | null, vw: number) =>
+      m === null ||
+      m.split(/\band\b/).every((q) => {
+        const px = /\((min|max)-width:\s*(\d+)px\)/.exec(q);
+        if (!px) return false; // prefers-reduced-motion etc.: not in effect here
+        const limit = Number(px[2]);
+        return px[1] === "min" ? vw >= limit : vw <= limit;
+      });
+    const computed = (el: Element, vw: number) => {
+      const hits = rules
+        .map((r, order) => ({ r, order, spec: Math.max(-1, ...r.selectors.filter((s) => el.matches(s)).map(specificity)) }))
+        .filter((h) => h.spec >= 0 && mediaMatches(h.r.media, vw))
+        .sort((a, b) => a.spec - b.spec || a.order - b.order);
+      return Object.assign({} as Record<string, string>, ...hits.map((h) => h.r.decls));
+    };
+
+    for (const vw of [320, 375, 560, 719, 720, 1024, 1440, 1920]) {
+      const s = computed(img, vw);
+      expect(s.width, `vw=${vw}`).toMatch(/^\d+px$/);
+      // Square by construction: height equals width, or height follows width.
+      if (s.height === "auto") expect(s["aspect-ratio"], `vw=${vw}`).toBe("1 / 1");
+      else expect(s.height, `vw=${vw}`).toBe(s.width);
+      // A width that can be clamped must never sit beside a fixed height.
+      if (s["max-width"] && s["max-width"] !== "none") expect(s.height, `vw=${vw}`).toBe("auto");
+    }
+
+    // Two-column desktop: the QR renders at 248px, can't be compressed, and the
+    // text column can't claim its width.
+    const wide = computed(img, 1440);
+    expect(wide.width).toBe("248px");
+    expect(wide["max-width"]).toBe("none");
+    expect(computed(card, 1440)["grid-template-columns"]).toMatch(/^minmax\(0,\s*1fr\)/);
   });
 });
 
