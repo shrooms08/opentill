@@ -68,6 +68,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     }
   };
 
+  app.get("/", async (_request, reply) => reply.redirect("/dashboard", 302));
+
   app.get("/healthz", async () => ({
     ok: true,
     adapterMode: config.adapterMode,

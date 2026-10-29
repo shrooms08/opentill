@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "network": "regtest",
+  "nextInvoiceIndex": 1,
+  "keys": [
+    {
+      "index": 0,
+      "change": false,
+      "path": "m/84'/1'/0'/0/0",
+      "xOnlyHex": "c7f4e7c5b6eccdf8fc0460ce6e04cc43063fca1a7e37eae25cbd5eac0d5196db",
+      "address": "bcrt1pcl6w03dkanxl3lqyvr8xupxvgvrrljs60cm74cjuh402cr23jmdshcu4al"
+    },
+    {
+      "index": 0,
+      "change": true,
+      "path": "m/84'/1'/0'/1/0",
+      "xOnlyHex": "66baa103842df189355c486ea5b82502055d7b13c5a72175e02d02877bd57c38",
+      "address": "bcrt1pv6a2zquy9hccjd2ufph2twp9qgz467cncknjza0q95pgw7740suqd7gv57"
+    }
+  ],
+  "watched": [
+    "bcrt1pv6a2zquy9hccjd2ufph2twp9qgz467cncknjza0q95pgw7740suqd7gv57"
+  ]
+}

@@ -21,8 +21,20 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 **Status:** engine, UIs, deployment, and integrations are complete and tested (195 tests). Settlement has **two adapters behind one interface**: `ADAPTER_MODE=mock` (the test/demo/CI adapter — no real Bitcoin moves, labeled as such in the dashboard) and `ADAPTER_MODE=tachi` — **real settlement on the Tachi ledger, proven end to end on regtest**: per-invoice addresses, live payment detection, `confirmed`, and refunds, with real transaction ids in [INTEGRATION.md](INTEGRATION.md). L1 payouts (cooperative withdrawal / unilateral exit) are not implemented in real mode — the protocol has no ledger→L1 path for receipts yet — see Limitations.
 
 **Try it**
-- Mock demo (always works): https://opentill-demo.fly.dev
-- Real settlement on `tachi-regtest-1`: https://opentill-live.fly.dev — real VTXO transactions, small regtest float, may run dry.
+- Mock demo (always works): https://opentill-demo.fly.dev/dashboard
+- Real settlement on `tachi-regtest-1`: https://opentill-live.fly.dev/dashboard
+
+Both dashboards ask for the server's API key, because OpenTill is
+self-hosted and has no accounts. For the hosted instances above, use:
+
+```
+opentill-live: c51790d2497e3ae5cc9ae8f0ab10922526a978a512b567cc
+```
+
+This is a disposable regtest credential for evaluation. It guards a demo
+instance holding testnet coins only. Self-hosting generates your own.
+
+Health check on either instance: `/healthz`
 
 **Verified real settlement** (Tachi regtest, 2026-08-26):
 - opentill-live: invoice paid `d1c157267f12532037770aff06f9084d77a13f474aebfe1ffcb4a1b4ad15d083`, refund broadcast `f4b3c19c0777326800f0efaf44b403a9107325264e80403bf6bd466f6b02841a`

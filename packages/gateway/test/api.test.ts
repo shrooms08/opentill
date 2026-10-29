@@ -23,6 +23,14 @@ describe("healthz", () => {
   });
 });
 
+describe("root", () => {
+  it("redirects / to /dashboard without auth", async () => {
+    const res = await h.app.inject({ method: "GET", url: "/" });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe("/dashboard");
+  });
+});
+
 describe("auth", () => {
   it.each([
     ["missing header", {}],
