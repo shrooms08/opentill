@@ -2,17 +2,19 @@
 
 Two Railway services in one project, built from this repo's `Dockerfile` (config: [`railway.json`](railway.json)):
 
-| Service | What it is | Variables file |
-| --- | --- | --- |
-| `opentill-live` | **Real** Tachi settlement on `tachi-regtest-1` | `.env.railway-live` |
-| `opentill-demo` | **Mock** settlement with the "Simulate payment" button | `.env.railway-demo` |
+| Service | What it is | Variables file | Deployed URL (2026-11-04) |
+| --- | --- | --- | --- |
+| `opentill-live` | **Real** Tachi settlement on `tachi-regtest-1` | `.env.railway-live` | https://opentill-live-production.up.railway.app |
+| `opentill-demo` | **Mock** settlement with the "Simulate payment" button | `.env.railway-demo` | https://opentill-demo-production.up.railway.app |
+
+Below, `<LIVE_URL>` / `<DEMO_URL>` are those URLs: the ones `railway domain` prints in steps 5 and 6.
 
 Run every command **from the repo root** (`cd` into the `opentill` folder first), in a macOS or Linux terminal. Nothing here prints a secret. Commands were written against Railway CLI **5.70.0**; check yours with `railway --version`.
 
 Where the secret values come from:
 
 - `.env.railway-demo` — already filled in (fresh API key + webhook secret). Nothing to do.
-- `.env.railway-live` — API key (same as your local `.env`) and webhook secret are filled in. **`TACHI_MNEMONIC` is empty; step 2 fills it.**
+- `.env.railway-live` — API key (same as your local `.env`), webhook secret, and (since 2026-11-04) a fresh `TACHI_MNEMONIC` are filled in. On a brand-new setup `TACHI_MNEMONIC` starts empty and step 2 fills it.
 - Your Railway account — you log in in step 1.
 
 To read a key later (e.g. to paste into the dashboard), open the file in a text editor. Don't `cat` it on a shared screen.
@@ -50,10 +52,13 @@ Why a new mnemonic and not the Fly one:
 railway init --name opentill
 railway add --service opentill-live
 railway service link opentill-live
-railway volume add --service opentill-live --mount-path /data
+railway volume add --mount-path /data
 ```
 
-`railway init` links this folder to the new project. If it asks for a workspace, pick yours.
+- **`railway init`** links this folder to the new project. If it asks for a workspace, pick yours.
+- **`railway add`** asks *What do you need?* → choose **Empty Service**. Press Enter at *Enter a variable* to skip it; step 4 loads the variables.
+- **`railway volume add`** attaches to the **linked** service, which is why `service link` comes first. Do **not** add `--service`: CLI 5.70.0 rejects it after `add` ("unexpected argument") and crashes with it before `add`. Check with `railway volume list`, which should show `/data`, `opentill-live`, `Ready`.
+- **The CLI warns** *"Config as Code (railway.json) is deprecated … keep working until 2026-12-01"* on every command. That's expected and harmless for now.
 
 ## 4. Load all live variables (values never printed)
 
@@ -72,8 +77,8 @@ railway up --service opentill-live --ci
 railway domain --service opentill-live --port 8080
 ```
 
-- `railway up --ci` uploads the folder (gitignored files such as `.env*` are **not** uploaded), builds the Dockerfile, and streams the build log. Wait for it to finish.
-- `railway domain` prints a URL like `https://opentill-live-production-xxxx.up.railway.app`. **That is `<LIVE_URL>`** — copy it.
+- `railway up --ci` uploads the folder (gitignored files such as `.env*` are **not** uploaded), builds the Dockerfile, and streams the build log. It ends with `Deploy complete` after Railway's `/healthz` check passes, about 3–4 minutes on the first build.
+- `railway domain` prints the URL, e.g. `https://opentill-live-production.up.railway.app`. **That is `<LIVE_URL>`** — copy it. You can run it while `railway up` is still building.
 
 Set it as the public URL. This is not a secret, and setting it triggers a redeploy:
 
@@ -94,9 +99,9 @@ It prints `deposit 50000 sats → bcrt1p…` then `committed=true … balance no
 ## 6. Same for `opentill-demo`
 
 ```bash
-railway add --service opentill-demo
-railway service link opentill-demo
-railway volume add --service opentill-demo --mount-path /data
+railway add --service opentill-demo          # Empty Service; Enter to skip the variable prompt
+railway service link opentill-demo           # volume add below attaches to the LINKED service
+railway volume add --mount-path /data
 sh scripts/railway-load-env.sh .env.railway-demo opentill-demo
 railway up --service opentill-demo --ci
 railway domain --service opentill-demo --port 8080
@@ -131,11 +136,20 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(sed -n 's/^
 Logs show Tachi connected and the gateway ready:
 
 ```bash
-railway logs --service opentill-live --lines 300 | grep -E "tachi: connected|gateway ready|refusing|not writable"
-railway logs --service opentill-demo --lines 300 | grep -E "gateway ready|not writable"
+railway logs --service opentill-live --deployment --lines 300 | grep -E "tachi: connected|gateway ready|refusing|not writable"
+railway logs --service opentill-demo --deployment --lines 300 | grep -E "gateway ready|not writable"
 ```
 
-Expect `"tachi: connected"` with `"chainId":"tachi-regtest-1"` and a `tillAddress` matching step 5's funding address, then `"opentill gateway ready"` with your `publicUrl`. On the demo, expect `"devPublicSimulate":true`.
+Railway prints logs as `key=value` text, not JSON. Expect:
+- `[INFO] tachi: connected … chainId="tachi-regtest-1" … tillAddress="bcrt1p…"`, with the till matching step 5's funding address;
+- then `[INFO] opentill gateway ready adapterMode="tachi" … publicUrl="<LIVE_URL>"`;
+- on the demo, `devPublicSimulate=true`.
+
+Optional: confirm the database is on the volume and the server isn't root. Each file should be owned by uid `1000`, and the last line should read `Uid: 1000 …`:
+
+```bash
+railway ssh --service opentill-live -- sh -c 'ls -ln /data; grep ^Uid /proc/1/status'
+```
 
 - **`not writable`** — `RAILWAY_RUN_UID=0` is missing. Re-run step 4 or 6.
 - **`refusing to boot`** — the mnemonic was used before; see step 2.
@@ -155,9 +169,9 @@ The last line should print `confirmed`. `pay:tachi` pays from the regtest "custo
 
 Demo pay button: open `<DEMO_URL>/dashboard`, log in with the demo key, go to New charge, and create a charge. The checkout should show **Simulate payment**.
 
-## 9. Stop the Fly machines
+## 9. Stop the Fly machines (legacy host)
 
-So two instances never run at once. Note that Fly's opentill-live still accepts the **old, published** API key: its key rotation is staged, not deployed.
+So two instances never run at once.
 
 ```bash
 fly machine list -a opentill-live
@@ -166,17 +180,20 @@ fly machine list -a opentill-demo
 fly machine stop <MACHINE_ID> -a opentill-demo
 ```
 
-`<MACHINE_ID>` is the `ID` column of the list. On 2026-11-04 opentill-live's machine was `8654742b665368`. Confirm with `curl -s https://opentill-live.fly.dev/healthz`, which should fail or time out.
+`<MACHINE_ID>` is the `ID` column of the list. Confirm with `fly machine list -a <app>`: the state should read `stopped`. Both apps have `auto_start_machines = false`, so incoming traffic does not wake them.
 
-**If the billing lock blocks `fly machine stop`:**
-- **Railway still works.** With a new mnemonic (step 2), Railway shares no keys with Fly.
-- **What remains exposed** is Fly's own regtest float: ~44 000 sats on its till, refundable by anyone holding the old published key. Those are test coins only.
-- **To close it:** settle the Fly bill and run `fly machine stop` (or `fly secrets deploy -a opentill-live` to activate the staged key), or ask Fly support to suspend the apps.
-- **Don't** point anyone at the `*.fly.dev` URLs any more.
+**Done 2026-11-04:** `8654742b665368` (opentill-live) and `8254dea7e2d598` (opentill-demo) stopped. The billing lock did **not** block `fly machine stop`, and both old hostnames stopped answering.
+- Volumes and images remain on Fly, so the old data is still there.
+- **Never `fly machine start` the old live app.** It runs the **old** mnemonic and still accepts the old, published API key (its rotation was staged, never deployed).
+- If the billing lock had blocked the stop, Railway would still be safe, since its new mnemonic shares no keys with Fly. The exposure would have been only Fly's own regtest float.
 
 ## 10. Update the README links
 
-In `README.md`, under **Try it**, replace the two "_URL added after the Railway deploy_" placeholders with `<DEMO_URL>/dashboard` and `<LIVE_URL>/dashboard`. Then commit.
+**Done 2026-11-04.** README "Try it" points at:
+- https://opentill-demo-production.up.railway.app/dashboard
+- https://opentill-live-production.up.railway.app/dashboard
+
+If you recreate a service and get a new domain, update those two lines and the service's `OPENTILL_PUBLIC_URL`.
 
 ---
 

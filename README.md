@@ -21,8 +21,8 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 **Status:** engine, UIs, deployment, and integrations are complete and tested (195 tests). Settlement has **two adapters behind one interface**: `ADAPTER_MODE=mock` (the test/demo/CI adapter — no real Bitcoin moves, labeled as such in the dashboard) and `ADAPTER_MODE=tachi` — **real settlement on the Tachi ledger, proven end to end on regtest**: per-invoice addresses, live payment detection, `confirmed`, and refunds, with real transaction ids in [INTEGRATION.md](INTEGRATION.md). L1 payouts (cooperative withdrawal / unilateral exit) are not implemented in real mode — the protocol has no ledger→L1 path for receipts yet — see Limitations.
 
 **Try it** — two hosted instances on Railway:
-- Mock demo (always works, has a "Simulate payment" button): _URL added after the Railway deploy — see [RAILWAY.md](RAILWAY.md)_
-- Real settlement on `tachi-regtest-1`: _URL added after the Railway deploy_
+- Mock demo (always works, has a "Simulate payment" button): https://opentill-demo-production.up.railway.app/dashboard
+- Real settlement on `tachi-regtest-1`: https://opentill-live-production.up.railway.app/dashboard
 
 Both dashboards ask for the server's API key, because OpenTill is
 self-hosted and has no accounts. The hosted instances' keys are not
@@ -31,7 +31,9 @@ published (a merchant key can issue refunds). To evaluate:
 - **Run your own instance** — the [Quickstart](#quickstart-docker) takes a
   couple of minutes, and `docker compose -f docker-compose.demo.yml up --build`
   gives you the full mock demo (store + checkout + dashboard) with your own key.
-- **Or request a demo key** for the hosted instances from the maintainer.
+- **Or request a demo key** for the hosted instances.
+
+Request a demo key: [open a GitHub issue](https://github.com/shrooms08/opentill/issues).
 
 Health check on either instance, no key needed: `/healthz`
 
@@ -167,9 +169,9 @@ Two Railway specifics the image handles:
 
 `NODE_ENV` and `OPENTILL_DEV_PUBLIC_SIMULATE` are plain runtime variables: the demo service sets `NODE_ENV=development` + `OPENTILL_DEV_PUBLIC_SIMULATE=true` to get the checkout's pay button.
 
-## Deploy to Fly.io (alternative)
+## Deploy to Fly.io (legacy)
 
-`fly.toml` / `fly.live.toml` are kept for reference; Railway is the primary host. Each ships a single always-on machine with a persistent volume for SQLite and a `/healthz` check. Commands (fly CLI required; **not run in this repo's CI — verify against your account**):
+**Legacy.** `fly.toml` / `fly.live.toml` are kept for reference only; Railway is the primary host and the former Fly instances were stopped on 2026-11-04. Each ships a single always-on machine with a persistent volume for SQLite and a `/healthz` check. Commands (fly CLI required; **not run in this repo's CI — verify against your account**):
 
 ```bash
 fly launch --no-deploy            # or: fly apps create opentill   (edit app/region in fly.toml)

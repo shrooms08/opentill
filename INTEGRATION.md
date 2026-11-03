@@ -94,7 +94,7 @@ Smoke (`npm run smoke:tachi`, regtest):
   (10 000 to key1, 39 999 change); `pending` + `committed` alerts received on
   **both** sender and receiver `watch({ address })` filters
 
-Public live instance (`https://opentill-live.fly.dev`, `ADAPTER_MODE=tachi`, deployed 2026-08-26):
+Public live instance (former Fly.io deployment, `ADAPTER_MODE=tachi`, deployed 2026-08-26, retired 2026-11-04; the live instance now runs on Railway at https://opentill-live-production.up.railway.app with a new mnemonic, so the till below is no longer in use):
 
 - boot: `tachi: connected {chainId: "tachi-regtest-1", height: 497237, tillAddress: "bcrt1psgqq…ung6", statePath: "/data/tachi-state.json"}`
 - till funded by ledger deposit `af05fd1d…caf6` (50 000 sats)

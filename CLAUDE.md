@@ -154,31 +154,27 @@ Read in [packages/gateway/src/config.ts](packages/gateway/src/config.ts) unless 
 
 ## 8. Deployment
 
-**Primary host: Railway** (since 2026-11-04; Fly is billing-locked). Runbook: [RAILWAY.md](RAILWAY.md).
-- [railway.json](railway.json): Dockerfile builder, `/healthz` check (120s), restart ON_FAILURE, 1 replica.
-- Services `opentill-live` (tachi, regtest) and `opentill-demo` (mock + simulate button), each with a volume at `/data`.
+**Primary host: Railway** (deployed 2026-11-04). Runbook: [RAILWAY.md](RAILWAY.md).
+- Railway project `opentill`, environment `production`:
+  - `opentill-live`: tachi, regtest, https://opentill-live-production.up.railway.app. Till `bcrt1pjsvx…kr2sa2mfmf` was funded with 100,000 regtest sats.
+  - `opentill-demo`: mock + simulate button, https://opentill-demo-production.up.railway.app.
+  - Each has its own volume at `/data` and its own API key.
+- [railway.json](railway.json): Dockerfile builder, `/healthz` check (120s), restart ON_FAILURE, 1 replica. The CLI warns that "Config as Code" is deprecated and keeps working until 2026-12-01; migrate to `.railway/railway.ts` before then.
+- Railway CLI 5.70.0 gotcha: `railway volume add` must use the **linked** service. `--service` errors after `add` and panics before it.
+- The `pay:tachi` customer key (smoke receive/1) was topped up to 92,992 sats on 2026-11-04.
 - Variables: templates `.env.railway-{live,demo}.example` (committed); filled `.env.railway-{live,demo}` (gitignored). Load them with `sh scripts/railway-load-env.sh <file> <service>`, which pipes each value through `railway variable set KEY --stdin`, so values are never shown.
 - [docker/entrypoint.sh](docker/entrypoint.sh): started as root (`RAILWAY_RUN_UID=0`) → `chown` the data dirs, `gosu node`. Started non-root → writability check with a clear error.
 - `OPENTILL_PUBLIC_URL` → `https://$RAILWAY_PUBLIC_DOMAIN` → null; builds `checkoutUrl` on merchant invoice DTOs ([config.ts](packages/gateway/src/config.ts) `resolvePublicUrl`).
 - Railway live uses a **new** mnemonic. The real adapter refuses to boot when a used mnemonic meets an empty state file ([tachi.ts](packages/adapter/src/tachi.ts) init guard). The old Fly volume backup lives at `../opentill-backup/opentill-live-data.tgz`.
 
-**Legacy (Fly.io, kept for reference):**
+**Legacy (Fly.io, kept for reference; both machines stopped 2026-11-04, volumes kept):**
 - `Dockerfile`: 2-stage, `npm ci` → `npm run build` → `npm prune --omit=dev`; runtime runs **as user `node`**, `NODE_ENV=production`, `OPENTILL_DB_PATH=/data/opentill.db`, `CMD tsx packages/gateway/src/main.ts`, Docker HEALTHCHECK on `/healthz`.
 - `docker-compose.yml` (prod-ish, named volume) and `docker-compose.demo.yml` (gateway + demo store, simulate on).
 - Fly.io, region `jnb`, single always-on machine + volume each:
   - `fly.toml` → **opentill-demo** (mock). The dev-simulate route is live there (probe 2026-11-03), so `NODE_ENV` and `OPENTILL_DEV_PUBLIC_SIMULATE=true` must be set as Fly secrets; they are **not** in `fly.toml`.
   - `fly.live.toml` → **opentill-live** (tachi, regtest). Secrets `OPENTILL_API_KEY`, `OPENTILL_WEBHOOK_SECRET`, `TACHI_MNEMONIC` are in Fly secrets only. Key index at `/data/tachi-state.json`.
-  - Both returned `{"ok":true,…,"dbOk":true}` on `/healthz` on 2026-11-03.
+  - Machines `8654742b665368` (live) and `8254dea7e2d598` (demo) were stopped on 2026-11-04. The live Fly instance used the **old** mnemonic, and its staged API-key rotation was never deployed, so never start it again with that key.
 - No CI config (`.github/` absent).
-
-**Railway: nothing exists** (no `railway.json`/`railway.toml`, `Procfile`, or nixpacks config). What it would take:
-1. Railway auto-detects the Dockerfile, so a config file is optional. Add `railway.json` if you want `healthcheckPath: /healthz` and a pinned single replica in code.
-2. Attach a **volume at `/data`** (SQLite and the tachi key index live there). Keep it to **1 replica** (SQLite single-writer; the key index is a local file).
-3. **Volume permissions:** the image runs as `node`, but Railway volumes mount root-owned, so SQLite will likely fail to open with EACCES. Railway's documented fix is the `RAILWAY_RUN_UID=0` variable (or change the image). Verify on first deploy.
-4. Variables: `OPENTILL_API_KEY`, `OPENTILL_WEBHOOK_SECRET`, `ADAPTER_MODE`, `OPENTILL_MERCHANT_NAME`. Tachi mode also needs `TACHI_MNEMONIC` (a **new** one per instance — never reuse opentill-live's), `TACHI_NETWORK=regtest`, `TACHI_STATE_PATH=/data/tachi-state.json`. `PORT` is injected by Railway and read by the app, and `HOST=0.0.0.0` is already set in the image.
-5. Mock demo with the pay button: override `NODE_ENV` (e.g. `development`) **and** set `OPENTILL_DEV_PUBLIC_SIMULATE=true`, because the image bakes `NODE_ENV=production`.
-6. Tachi mode: fund the new till with `npm run fund:tachi` after first boot (the till address is in the boot log). Boot needs the Tachi RPC reachable before it listens, so allow a generous healthcheck timeout.
-7. Update the README "Try it" links, which point at `*.fly.dev`.
 
 ## 9. Known issues and gaps
 
