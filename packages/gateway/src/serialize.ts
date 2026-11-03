@@ -12,7 +12,12 @@ import {
 } from "@opentill/shared";
 import type { Repo, WebhookDelivery } from "./db/repo";
 
-export function toInvoiceDTO(invoice: Invoice): InvoiceDTO {
+/** Absolute hosted-checkout link for an invoice, or null without a configured public URL. */
+export function checkoutUrlFor(invoiceId: string, publicUrl: string | null): string | null {
+  return publicUrl ? `${publicUrl}/pay/${invoiceId}` : null;
+}
+
+export function toInvoiceDTO(invoice: Invoice, opts: { publicUrl?: string | null } = {}): InvoiceDTO {
   return {
     id: invoice.id,
     status: invoice.status,
@@ -21,6 +26,7 @@ export function toInvoiceDTO(invoice: Invoice): InvoiceDTO {
     shortfallSats: invoice.shortfallSats === null ? null : invoice.shortfallSats.toString(),
     address: invoice.address,
     paymentUri: buildPaymentUri(invoice.address, invoice.amountSats, invoice.memo),
+    checkoutUrl: checkoutUrlFor(invoice.id, opts.publicUrl ?? null),
     memo: invoice.memo,
     orderId: invoice.orderId,
     webhookUrl: invoice.webhookUrl,

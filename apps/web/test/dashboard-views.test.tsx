@@ -35,6 +35,7 @@ const invoice: InvoiceDTO = {
   shortfallSats: null,
   address: "mock1pfixture",
   paymentUri: "bitcoin:mock1pfixture?amount=0.0005",
+  checkoutUrl: null,
   memo: "Flat white",
   orderId: "ORD-9",
   webhookUrl: "https://merchant.example/hook",

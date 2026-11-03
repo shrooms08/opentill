@@ -154,7 +154,15 @@ Read in [packages/gateway/src/config.ts](packages/gateway/src/config.ts) unless 
 
 ## 8. Deployment
 
-**Exists:**
+**Primary host: Railway** (since 2026-11-04; Fly is billing-locked). Runbook: [RAILWAY.md](RAILWAY.md).
+- [railway.json](railway.json): Dockerfile builder, `/healthz` check (120s), restart ON_FAILURE, 1 replica.
+- Services `opentill-live` (tachi, regtest) and `opentill-demo` (mock + simulate button), each with a volume at `/data`.
+- Variables: templates `.env.railway-{live,demo}.example` (committed); filled `.env.railway-{live,demo}` (gitignored). Load them with `sh scripts/railway-load-env.sh <file> <service>`, which pipes each value through `railway variable set KEY --stdin`, so values are never shown.
+- [docker/entrypoint.sh](docker/entrypoint.sh): started as root (`RAILWAY_RUN_UID=0`) → `chown` the data dirs, `gosu node`. Started non-root → writability check with a clear error.
+- `OPENTILL_PUBLIC_URL` → `https://$RAILWAY_PUBLIC_DOMAIN` → null; builds `checkoutUrl` on merchant invoice DTOs ([config.ts](packages/gateway/src/config.ts) `resolvePublicUrl`).
+- Railway live uses a **new** mnemonic. The real adapter refuses to boot when a used mnemonic meets an empty state file ([tachi.ts](packages/adapter/src/tachi.ts) init guard). The old Fly volume backup lives at `../opentill-backup/opentill-live-data.tgz`.
+
+**Legacy (Fly.io, kept for reference):**
 - `Dockerfile`: 2-stage, `npm ci` → `npm run build` → `npm prune --omit=dev`; runtime runs **as user `node`**, `NODE_ENV=production`, `OPENTILL_DB_PATH=/data/opentill.db`, `CMD tsx packages/gateway/src/main.ts`, Docker HEALTHCHECK on `/healthz`.
 - `docker-compose.yml` (prod-ish, named volume) and `docker-compose.demo.yml` (gateway + demo store, simulate on).
 - Fly.io, region `jnb`, single always-on machine + volume each:

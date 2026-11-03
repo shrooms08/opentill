@@ -20,9 +20,9 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 
 **Status:** engine, UIs, deployment, and integrations are complete and tested (195 tests). Settlement has **two adapters behind one interface**: `ADAPTER_MODE=mock` (the test/demo/CI adapter — no real Bitcoin moves, labeled as such in the dashboard) and `ADAPTER_MODE=tachi` — **real settlement on the Tachi ledger, proven end to end on regtest**: per-invoice addresses, live payment detection, `confirmed`, and refunds, with real transaction ids in [INTEGRATION.md](INTEGRATION.md). L1 payouts (cooperative withdrawal / unilateral exit) are not implemented in real mode — the protocol has no ledger→L1 path for receipts yet — see Limitations.
 
-**Try it**
-- Mock demo (always works): https://opentill-demo.fly.dev/dashboard
-- Real settlement on `tachi-regtest-1`: https://opentill-live.fly.dev/dashboard
+**Try it** — two hosted instances on Railway:
+- Mock demo (always works, has a "Simulate payment" button): _URL added after the Railway deploy — see [RAILWAY.md](RAILWAY.md)_
+- Real settlement on `tachi-regtest-1`: _URL added after the Railway deploy_
 
 Both dashboards ask for the server's API key, because OpenTill is
 self-hosted and has no accounts. The hosted instances' keys are not
@@ -61,7 +61,7 @@ ledger→L1 offboarding. See [INTEGRATION.md](INTEGRATION.md) §5.
 | **Invoice generation** | `POST /api/invoices` → unique receive address + BIP21 URI; hosted at `/pay/:id`. | Test `happy path › create -> simulate -> paid -> confirmed`; screen `01-checkout-confirmed`. |
 | **Real-time confirmation** | Poller detects payment → SSE pushes `paid`/`confirmed` live to the checkout; no refresh. | Test `SSE › streams snapshot -> paid -> confirmed`; command: pay on `/pay/:id` and watch. |
 | **Dashboard w/ transactions + refunds** | `/dashboard` — overview, invoices table + detail slide-over, refund flow. | Test suite `gate3.test.ts` (stats, listing) + `dashboard-views.test.tsx`; screen `02-dashboard-overview`. |
-| **Self-hosted / open-source deployment** | One MIT-licensed container; `docker compose up`, or Fly.io (`fly deploy`), or `npm run dev`. | `Dockerfile`, `docker-compose.yml`, `fly.toml`; command `docker compose up --build`. |
+| **Self-hosted / open-source deployment** | One MIT-licensed container; `docker compose up`, or Railway ([RAILWAY.md](RAILWAY.md)), or Fly.io, or `npm run dev`. | `Dockerfile`, `railway.json`, `docker-compose.yml`, `fly.toml`; command `docker compose up --build`. |
 | **E-commerce plugin** | WooCommerce payment gateway (`plugins/opentill-for-woocommerce/`) + a from-scratch demo store. | Plugin `php -l` clean; integration test `demo store round trip`; screen `05-demo-store`. |
 | **Payout & liquidity flow** | Cooperative withdrawal **and** unilateral exit (sweep to on-chain Bitcoin, no permission) — full lifecycle in mock mode; **proven for real on regtest via a Taurus vault** (exit `5bb2960b…d0c3`, co-signed refund `b78cdb62…f86b`). Receipts cannot reach it yet: the protocol has no ledger→L1 offboarding today (INTEGRATION.md §5). | Test suite `gate4.test.ts` (both lifecycles, exit lock); screen `04-payouts-exit`. |
 
@@ -156,9 +156,20 @@ Plainly, so there are no surprises:
 - **WooCommerce sats conversion is a fixed rate.** The plugin converts order totals to sats via a merchant-set "sats per currency unit" number — no live BTC/fiat feed. Price products in sats (rate = 1) or pin a rate you manage. See the [plugin README](plugins/opentill-for-woocommerce/README.md).
 - **Single-merchant auth.** One API key, one merchant, one storefront (`OPENTILL_MERCHANT_NAME`). No multi-tenant accounts — that is deliberate for a self-hosted tool.
 
-## Deploy to Fly.io
+## Deploy to Railway (primary)
 
-`fly.toml` ships a single always-on machine with a persistent volume for SQLite and a `/healthz` check. Commands (fly CLI required; **not run in this repo's CI — verify against your account**):
+[`railway.json`](railway.json) builds the Dockerfile, health-checks `/healthz` (120 s), restarts on failure and pins one replica (SQLite is single-writer). Each service needs a volume at `/data` and its variables from [`.env.railway-live.example`](.env.railway-live.example) or [`.env.railway-demo.example`](.env.railway-demo.example). The step-by-step runbook — CLI install, services, volumes, loading variables without echoing them, domains, verification — is **[RAILWAY.md](RAILWAY.md)**.
+
+Two Railway specifics the image handles:
+
+- **Volume permissions.** Railway mounts volumes root-owned and the image runs as `node`. Set `RAILWAY_RUN_UID=0`: the entrypoint ([`docker/entrypoint.sh`](docker/entrypoint.sh)) then starts as root, `chown`s the data directories, and drops to `node` with `gosu`. Started as non-root (Docker, Fly) it just checks the directories are writable.
+- **Public URL.** `checkoutUrl` in API responses uses `OPENTILL_PUBLIC_URL`, falling back to `https://$RAILWAY_PUBLIC_DOMAIN` (injected by Railway once the service has a domain).
+
+`NODE_ENV` and `OPENTILL_DEV_PUBLIC_SIMULATE` are plain runtime variables: the demo service sets `NODE_ENV=development` + `OPENTILL_DEV_PUBLIC_SIMULATE=true` to get the checkout's pay button.
+
+## Deploy to Fly.io (alternative)
+
+`fly.toml` / `fly.live.toml` are kept for reference; Railway is the primary host. Each ships a single always-on machine with a persistent volume for SQLite and a `/healthz` check. Commands (fly CLI required; **not run in this repo's CI — verify against your account**):
 
 ```bash
 fly launch --no-deploy            # or: fly apps create opentill   (edit app/region in fly.toml)
@@ -296,7 +307,7 @@ All `/api/*` routes require `Authorization: Bearer $OPENTILL_API_KEY`. Every bod
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/healthz` | No auth. `{ ok, adapterMode, dbOk }`. |
-| `POST` | `/api/invoices` | `{ amountSats, memo?, orderId?, webhookUrl?, returnUrl?, expiresInSeconds? }` → `201` with the invoice, `address`, and `paymentUri`. |
+| `POST` | `/api/invoices` | `{ amountSats, memo?, orderId?, webhookUrl?, returnUrl?, expiresInSeconds? }` → `201` with the invoice, `address`, `paymentUri`, and `checkoutUrl` (absolute `/pay/:id` link; `null` unless `OPENTILL_PUBLIC_URL` or `RAILWAY_PUBLIC_DOMAIN` is set). |
 | `GET` | `/api/invoices/:id` | Invoice plus its `payments[]`. |
 | `GET` | `/api/invoices` | Newest first. `?status=&q=&limit=&offset=` (limit 1–200, default 50). `q` matches `orderId` exactly or the invoice id by prefix. |
 | `POST` | `/api/invoices/:id/refund` | `{ toAddress }`. Only from `confirmed`; refunds `amountPaidSats`. |
@@ -429,6 +440,9 @@ Any non-2xx or transport error is retried by an interval sweep with backoff **5s
 | `OPENTILL_PORT` | no | `8080` | docker-compose only: host port mapped to the container's 8080. |
 | `PAYOUT_POLL_INTERVAL_MS` | no | `2000` | Payout status sweep interval. |
 | `OPENTILL_WEB_DIST` | no | `apps/web/dist` | Where the gateway looks for the built checkout bundle. |
+| `OPENTILL_PUBLIC_URL` | no | — | Public origin of this gateway (e.g. `https://pay.example.com`); builds `checkoutUrl`. Must be absolute http(s). |
+| `RAILWAY_PUBLIC_DOMAIN` | no | — | Injected by Railway; fallback for `OPENTILL_PUBLIC_URL` as `https://<domain>`. |
+| `RAILWAY_RUN_UID` | Railway | — | Set to `0` on Railway so the entrypoint can fix volume ownership, then drop to `node`. |
 
 Secrets belong in `.env` only — see `.env.example`. `.env` and `*.db` are gitignored.
 

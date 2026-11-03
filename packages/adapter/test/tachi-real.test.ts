@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -80,6 +80,22 @@ describe("TachiRealAdapter — boot", () => {
 
   it("requires a mnemonic", () => {
     expect(() => new TachiRealAdapter({ rpcUrl: "https://x", network: "regtest", mnemonic: "", statePath: "x" })).toThrow(/TACHI_MNEMONIC/);
+  });
+
+  it("refuses a used mnemonic with an empty state file, without writing one; a restored state boots", async () => {
+    const fake = makeFake();
+    const original = join(dir, "original.json");
+    const first = adapter(fake, {}, original);
+    await first.init();
+    const { address: invoice0 } = await first.createReceiveAddress("inv-0");
+    // A customer paid invoice 0 on the original instance.
+    fake.state.vtxos.set(invoice0, [{ id: "aa".repeat(32), owner: "", amount: 2_000, spent: false, height: 482_000, script: "", locked: false }]);
+
+    const wiped = join(dir, "wiped.json");
+    await expect(adapter(fake, {}, wiped).init()).rejects.toThrow(/already used by an OpenTill instance.*refusing to boot/);
+    expect(existsSync(wiped)).toBe(false); // stays refused on the next boot too
+
+    await expect(adapter(fake, {}, original).init()).resolves.toBeUndefined();
   });
 });
 

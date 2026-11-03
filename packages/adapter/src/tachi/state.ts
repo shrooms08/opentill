@@ -21,23 +21,27 @@ export interface TachiAdapterState {
 export class StateStore {
   readonly #path: string;
   #state: TachiAdapterState;
+  /** False when no state file existed at load time (first boot, or an emptied volume). */
+  readonly loadedFromDisk: boolean;
 
   constructor(path: string, network: string) {
     this.#path = path;
-    this.#state = StateStore.#load(path, network);
+    const loaded = StateStore.#load(path, network);
+    this.#state = loaded.state;
+    this.loadedFromDisk = loaded.fromDisk;
   }
 
-  static #load(path: string, network: string): TachiAdapterState {
+  static #load(path: string, network: string): { state: TachiAdapterState; fromDisk: boolean } {
     try {
       const parsed = JSON.parse(readFileSync(path, "utf8")) as TachiAdapterState;
       if (parsed.version !== 1) throw new Error(`unsupported state version ${String(parsed.version)}`);
       if (parsed.network !== network) {
         throw new Error(`state file ${path} is for network "${parsed.network}", adapter is "${network}"`);
       }
-      return parsed;
+      return { state: parsed, fromDisk: true };
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return { version: 1, network, nextInvoiceIndex: 0, keys: [], watched: [] };
+        return { state: { version: 1, network, nextInvoiceIndex: 0, keys: [], watched: [] }, fromDisk: false };
       }
       throw err;
     }

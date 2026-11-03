@@ -39,6 +39,12 @@ export interface GatewayConfig {
   webDistPath: string;
   /** Storefront name shown to customers in the checkout header. */
   merchantName: string;
+  /**
+   * Public origin customers reach this gateway at (no trailing slash), used to
+   * build absolute checkout links. OPENTILL_PUBLIC_URL, else
+   * https://$RAILWAY_PUBLIC_DOMAIN, else null (links stay relative).
+   */
+  publicUrl: string | null;
   /** Real-settlement settings; null unless ADAPTER_MODE=tachi. */
   tachi: Omit<TachiAdapterConfig, "log"> | null;
 }
@@ -53,6 +59,25 @@ function intFromEnv(env: NodeJS.ProcessEnv, key: string, fallback: number): numb
     throw new Error(`${key} must be a positive integer, got ${JSON.stringify(raw)}`);
   }
   return n;
+}
+
+/** OPENTILL_PUBLIC_URL → https://$RAILWAY_PUBLIC_DOMAIN → null. Origin only, no trailing slash. */
+export function resolvePublicUrl(env: NodeJS.ProcessEnv): string | null {
+  const explicit = env.OPENTILL_PUBLIC_URL?.trim();
+  if (explicit) {
+    let parsed: URL;
+    try {
+      parsed = new URL(explicit);
+    } catch {
+      throw new Error(`OPENTILL_PUBLIC_URL must be an absolute http(s) URL, got ${JSON.stringify(explicit)}`);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`OPENTILL_PUBLIC_URL must be an absolute http(s) URL, got ${JSON.stringify(explicit)}`);
+    }
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "");
+  }
+  const railwayDomain = env.RAILWAY_PUBLIC_DOMAIN?.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  return railwayDomain ? `https://${railwayDomain}` : null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -130,6 +155,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     payoutPollIntervalMs: intFromEnv(env, "PAYOUT_POLL_INTERVAL_MS", DEFAULT_POLL_INTERVAL_MS),
     webDistPath: env.OPENTILL_WEB_DIST ?? DEFAULT_WEB_DIST,
     merchantName: env.OPENTILL_MERCHANT_NAME?.trim() || "OpenTill",
+    publicUrl: resolvePublicUrl(env),
     tachi,
   };
 }

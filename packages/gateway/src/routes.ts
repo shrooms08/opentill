@@ -59,6 +59,7 @@ function constantTimeEquals(a: string, b: string): boolean {
 
 export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { config, ctx } = deps;
+  const dto = { publicUrl: config.publicUrl };
 
   const requireApiKey = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const header = request.headers.authorization ?? "";
@@ -85,7 +86,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       if (!body) return reply;
       const invoice = await createInvoice(ctx, body);
       deps.flushWebhooks();
-      return reply.code(201).send(toInvoiceDTO(invoice));
+      return reply.code(201).send(toInvoiceDTO(invoice, dto));
     });
 
     api.get("/api/invoices", async (request, reply) => {
@@ -93,7 +94,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       if (!query) return reply;
       const invoices = ctx.repo.listInvoices(query);
       return reply.send({
-        invoices: invoices.map(toInvoiceDTO),
+        invoices: invoices.map((i) => toInvoiceDTO(i, dto)),
         total: ctx.repo.countInvoices(query.status, query.q),
         limit: query.limit,
         offset: query.offset,
@@ -142,7 +143,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
         return reply.code(404).send({ error: "not_found", message: `invoice ${params.id} not found` });
       }
       return reply.send({
-        ...toInvoiceDTO(invoice),
+        ...toInvoiceDTO(invoice, dto),
         payments: ctx.repo.listPaymentsForInvoice(invoice.id).map(toPaymentDTO),
       });
     });
@@ -162,17 +163,17 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
           return reply.code(409).send({
             error: "exit_pending",
             message: result.error,
-            invoice: toInvoiceDTO(result.invoice),
+            invoice: toInvoiceDTO(result.invoice, dto),
           });
         }
         if (result.error !== null) {
           return reply.code(502).send({
             error: "refund_failed",
             message: result.error,
-            invoice: toInvoiceDTO(result.invoice),
+            invoice: toInvoiceDTO(result.invoice, dto),
           });
         }
-        return reply.send({ txId: result.txId, invoice: toInvoiceDTO(result.invoice) });
+        return reply.send({ txId: result.txId, invoice: toInvoiceDTO(result.invoice, dto) });
       } catch (err) {
         if (err instanceof InvoiceNotFoundError) {
           return reply.code(404).send({ error: "not_found", message: err.message });

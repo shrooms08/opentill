@@ -15,7 +15,13 @@ async function main(): Promise<void> {
 
   await instance.app.listen({ port: config.port, host: config.host });
   instance.app.log.info(
-    { adapterMode: config.adapterMode, db: config.dbPath, devRoutes: config.devRoutesEnabled },
+    {
+      adapterMode: config.adapterMode,
+      db: config.dbPath,
+      devRoutes: config.devRoutesEnabled,
+      devPublicSimulate: config.devPublicSimulate,
+      publicUrl: config.publicUrl,
+    },
     "opentill gateway ready",
   );
 }

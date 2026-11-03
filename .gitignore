@@ -20,3 +20,7 @@ tachi-state.json
 tachi-adapter.json
 tachi-state.json.tmp
 tachi-adapter.json.tmp
+
+# Filled-in Railway variable files (templates: .env.railway-*.example)
+.env.railway-live
+.env.railway-demo

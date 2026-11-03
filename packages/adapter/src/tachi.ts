@@ -92,13 +92,7 @@ export class TachiRealAdapter implements TachiAdapter {
     this.#keyring = await MerchantKeyring.fromMnemonic(this.#cfg.mnemonic, this.#cfg.network);
     this.#state = new StateStore(this.#cfg.statePath, this.#cfg.network);
 
-    // The "till" key (receive chain, index 0): the merchant's float. Refunds
-    // are paid from whichever key can cover amount + fee; a funded till key
-    // keeps refunds working even when an invoice key holds exactly its amount.
     const till = this.#keyring.derive(0, false);
-    if (!this.#state.findByAddress(till.address)) {
-      this.#state.update((s) => s.keys.unshift(till));
-    }
 
     const health = await this.#client.getHealth();
     const status = await this.#client.getStatus();
@@ -109,6 +103,30 @@ export class TachiRealAdapter implements TachiAdapter {
       throw new Error(
         `TACHI_NETWORK=${this.#cfg.network} but the daemon at ${this.#cfg.rpcUrl} reports chain "${chainId}" — refusing to boot`,
       );
+    }
+
+    // Mnemonic-reuse guard. With no state file, invoice keys restart at index
+    // 0; if this mnemonic already handed those out (another instance, or a
+    // wiped volume) their old ledger payments would be credited to brand-new
+    // invoices on the first poll. Checked before anything is written, so a
+    // refused boot stays refused on the next attempt.
+    if (!this.#state.loadedFromDisk) {
+      const firstInvoiceKey = this.#keyring.derive(0, true);
+      const history = await this.#client.getAddressVtxos(firstInvoiceKey.address, true);
+      if (history.vtxos.length > 0) {
+        throw new Error(
+          `TACHI_MNEMONIC was already used by an OpenTill instance: invoice key ${firstInvoiceKey.path} has ledger history, ` +
+            `but there is no state file at ${this.#cfg.statePath}. Starting fresh would reuse old invoice addresses and credit ` +
+            `old payments to new invoices — refusing to boot. Restore that instance's state file + database, or use a new mnemonic.`,
+        );
+      }
+    }
+
+    // The "till" key (receive chain, index 0): the merchant's float. Refunds
+    // are paid from whichever key can cover amount + fee; a funded till key
+    // keeps refunds working even when an invoice key holds exactly its amount.
+    if (!this.#state.findByAddress(till.address)) {
+      this.#state.update((s) => s.keys.unshift(till));
     }
     this.#log("tachi: connected", {
       rpcUrl: this.#cfg.rpcUrl,

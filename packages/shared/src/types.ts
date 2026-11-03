@@ -57,6 +57,8 @@ export interface InvoiceDTO {
   shortfallSats: string | null;
   address: string;
   paymentUri: string;
+  /** Absolute hosted-checkout link; null when the gateway's public URL is not configured. */
+  checkoutUrl: string | null;
   memo: string | null;
   orderId: string | null;
   webhookUrl: string | null;
