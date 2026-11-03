@@ -25,16 +25,15 @@ OpenTill is a self-hosted Bitcoin payment gateway: one container that takes paym
 - Real settlement on `tachi-regtest-1`: https://opentill-live.fly.dev/dashboard
 
 Both dashboards ask for the server's API key, because OpenTill is
-self-hosted and has no accounts. For the hosted instances above, use:
+self-hosted and has no accounts. The hosted instances' keys are not
+published (a merchant key can issue refunds). To evaluate:
 
-```
-opentill-live: c51790d2497e3ae5cc9ae8f0ab10922526a978a512b567cc
-```
+- **Run your own instance** — the [Quickstart](#quickstart-docker) takes a
+  couple of minutes, and `docker compose -f docker-compose.demo.yml up --build`
+  gives you the full mock demo (store + checkout + dashboard) with your own key.
+- **Or request a demo key** for the hosted instances from the maintainer.
 
-This is a disposable regtest credential for evaluation. It guards a demo
-instance holding testnet coins only. Self-hosting generates your own.
-
-Health check on either instance: `/healthz`
+Health check on either instance, no key needed: `/healthz`
 
 **Verified real settlement** (Tachi regtest, 2026-08-26):
 - opentill-live: invoice paid `d1c157267f12532037770aff06f9084d77a13f474aebfe1ffcb4a1b4ad15d083`, refund broadcast `f4b3c19c0777326800f0efaf44b403a9107325264e80403bf6bd466f6b02841a`

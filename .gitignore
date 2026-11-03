@@ -14,3 +14,9 @@ coverage/
 .tachi-smoke-state.json
 .tachi-spike-state.json
 .tachi-lock-state.json
+
+# Tachi adapter runtime key index (TACHI_STATE_PATH; default <db dir>/tachi-adapter.json)
+tachi-state.json
+tachi-adapter.json
+tachi-state.json.tmp
+tachi-adapter.json.tmp
