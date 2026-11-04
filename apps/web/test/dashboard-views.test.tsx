@@ -59,6 +59,7 @@ const detailInvoice: InvoiceWithPayments = {
       amountSats: "50000",
       status: "committed",
       latePayment: false,
+      txId: null,
       observedAt: NOW,
     },
   ],
@@ -92,6 +93,8 @@ const posFixture: PublicInvoice = {
   latePayment: false,
   devSimulate: false,
   returnUrl: null,
+  paymentTxIds: [],
+  explorer: null,
 };
 
 afterEach(cleanup);
@@ -265,6 +268,8 @@ describe("POS", () => {
       latePayment: false,
       devSimulate: false,
       returnUrl: null,
+      paymentTxIds: [],
+      explorer: null,
     };
 
     const { container, unmount } = render(

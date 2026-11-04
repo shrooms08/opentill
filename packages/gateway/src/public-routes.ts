@@ -45,6 +45,8 @@ export async function registerPublicRoutes(
       latePayment: ctx.repo.hasLatePayment(invoice.id),
       devSimulate: config.devPublicSimulate,
       merchantName: config.merchantName,
+      paymentTxIds: ctx.repo.listPaymentTxIds(invoice.id),
+      explorer: config.explorer,
     });
 
   // ---- public invoice view ---------------------------------------------------

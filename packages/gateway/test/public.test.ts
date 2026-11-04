@@ -28,6 +28,9 @@ const PUBLIC_FIELDS = [
   "expiresAt",
   "latePayment",
   "devSimulate",
+  // Public ledger data / non-secret link templates ("View on Tachi").
+  "paymentTxIds",
+  "explorer",
 ].sort();
 
 const FORBIDDEN_FIELDS = [

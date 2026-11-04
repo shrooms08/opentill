@@ -6,6 +6,24 @@ export interface IncomingPayment {
   /** unix ms */
   observedAt: number;
   status: "seen" | "committed";
+  /** Settlement-layer transaction that created this output, when known (best-effort). */
+  txId?: string;
+}
+
+/**
+ * The single, user-facing reason on-chain payouts are off in real mode. Kept
+ * here so the adapter error, the API 501 and the dashboard card say the same.
+ */
+export const PAYOUT_UNSUPPORTED_MESSAGE =
+  "On-chain payouts are coming with Tachi exit support. Received sats stay self-custodial on Tachi. " +
+  "Moving them back to on-chain Bitcoin needs Tachi's VTXO exit, which the protocol does not expose yet.";
+
+/** Thrown by adapters whose settlement layer cannot pay out to L1 (yet). */
+export class PayoutUnsupportedError extends Error {
+  constructor(message: string = PAYOUT_UNSUPPORTED_MESSAGE) {
+    super(message);
+    this.name = "PayoutUnsupportedError";
+  }
 }
 
 /**
@@ -48,6 +66,7 @@ export interface TachiAdapter {
    * Start a withdrawal to on-chain Bitcoin. `amountSats` is required for
    * "cooperative" and ignored for "exit" (an exit sweeps the vault).
    * Validation failures come back as a payout with status "failed" (no debit).
+   * Throws PayoutUnsupportedError when the settlement layer has no L1 exit.
    */
   initiatePayout(params: {
     kind: PayoutKind;
@@ -56,6 +75,8 @@ export interface TachiAdapter {
   }): Promise<AdapterPayout>;
   /** Current status of all non-settled payouts (plus just-settled ones once). */
   pollPayouts(): Promise<AdapterPayout[]>;
+  /** The merchant's float address on the settlement layer, if the adapter has one. */
+  getTillAddress?(): string | null;
   /** Release any timers/sockets held by the adapter. */
   close?(): Promise<void>;
 }

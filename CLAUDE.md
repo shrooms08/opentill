@@ -125,6 +125,8 @@ Read in [packages/gateway/src/config.ts](packages/gateway/src/config.ts) unless 
 | `NODE_ENV` | `production` disables `/dev/*` | unset | ✗ (Dockerfile sets `production`) |
 | `OPENTILL_DEV_PUBLIC_SIMULATE` | unauth `/dev/pay/:id`; boot refuses with non-mock | `false` | ✓ |
 | `OPENTILL_PAYOUT_WEBHOOK_URL` | payout webhooks | unset = off | # |
+| `TACHI_EXPLORER_TX_URL` / `TACHI_EXPLORER_ADDRESS_URL` | "View on Tachi" link templates (`{hash}`/`{address}`), tachi mode only | daemon `/tachi_tx`, `/tachi_addressVtxos` | # |
+| `OPENTILL_DEMO_URL` | live Payouts page → demo link | unset | live template |
 | `POLL_INTERVAL_MS` / `EXPIRY_SWEEP_INTERVAL_MS` / `WEBHOOK_SWEEP_INTERVAL_MS` / `SSE_HEARTBEAT_MS` / `PAYOUT_POLL_INTERVAL_MS` | timers | 2000 / 10000 / 5000 / 15000 / 2000 | # |
 | `OPENTILL_WEB_DIST` | built UI dir | `apps/web/dist` | # |
 | `OPENTILL_PORT` | docker-compose host port only | `8080` | # |
@@ -184,9 +186,9 @@ Most deliberate gaps are already listed in [GAPS.md](GAPS.md). Additional findin
 - **API key is env-only.** `OPENTILL_API_KEY` is read in `config.ts` and constant-time compared in `routes.ts`; nothing is stored in SQLite. Rotating = change the env/secret and restart.
 - **Watched addresses are never removed.** The gateway never calls `unwatchAddress`. In tachi mode every tick makes 2 sequential RPCs per invoice ever created, plus `getStatus`. Latency grows with history, and overlapping ticks are skipped via `#inFlight`.
 - **Refund change can be re-credited to another invoice (likely bug, untested).** `send()` picks the *smallest* single key that covers `amount+fee`, so it can spend an invoice key rather than the till ([tachi.ts:226](packages/adapter/src/tachi.ts#L226)). The change returns to that key, which is still watched. The next poll records it as a new committed payment and credits it to that invoice as an overpayment.
-- **Stale payout error text.** `initiatePayout` says "TxLockForVault has no SDK builder yet". INTEGRATION.md §5.4 now says the blocker is a protocol gap. The §3 table in INTEGRATION.md has the same stale wording.
+- **Payouts in real mode (fixed 2026-11-04).** `initiatePayout` throws `PayoutUnsupportedError` → API 501 `payout_unsupported`; the Payouts page shows a "coming with Tachi exit support" card linking `OPENTILL_DEMO_URL`. No `failed` rows are created any more.
+- **"View on Tachi" links point at daemon JSON, not an explorer.** `explorer-regtest.tachibtc.com` is BTC RPC Explorer (L1 only: `/tx/<ledger hash>` → 500, `/address` → "No address API is configured"). Defaults: `${TACHI_RPC_URL}/tachi_tx?hash={hash}` and `/tachi_addressVtxos?address={address}&include_spent=true`; override with `TACHI_EXPLORER_TX_URL` / `TACHI_EXPLORER_ADDRESS_URL`. Payment txids (`payments.tx_id`, migration 005) are best-effort: mempool `tx_hash` when seen, else matched from the block at the VTXO's height.
 - **Real-mode QR uses a `bitcoin:` URI** for an address that only receives on the Tachi *ledger*. An ordinary Bitcoin wallet would pay L1 and the gateway would never detect it. Real payments currently come only from `npm run pay:tachi` or another Tachi ledger wallet.
-- **Payouts view has no real-mode awareness.** It shows both payout cards in tachi mode, and submitting creates a `failed` payout row (400 `payout_failed`).
 - **Mock adapter state is in-memory.** After a restart, balances, payouts and the event log reset while SQLite invoices persist, so a restarted mock demo shows revenue but 0 spendable.
 - **Doc drift.** Test count is 197 (README says 195 and, in "Tests", 170). The main README calls the plugin "two-file"; the plugin README says three PHP + one JS. The README "Checkout page" section still says "checkout only in this gate". The demo video link is "_(link to be added)_".
 - **Production runs TypeScript through tsx** (no precompile). It's documented, but means a slower cold start and `tsx` as a runtime dependency.

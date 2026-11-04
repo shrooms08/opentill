@@ -1,5 +1,6 @@
 import {
   buildPaymentUri,
+  type ExplorerLinks,
   type Invoice,
   type InvoiceDTO,
   type Payment,
@@ -48,7 +49,13 @@ export function toInvoiceDTO(invoice: Invoice, opts: { publicUrl?: string | null
  */
 export function toPublicInvoiceDTO(
   invoice: Invoice,
-  opts: { latePayment: boolean; devSimulate: boolean; merchantName: string },
+  opts: {
+    latePayment: boolean;
+    devSimulate: boolean;
+    merchantName: string;
+    paymentTxIds?: string[];
+    explorer?: ExplorerLinks | null;
+  },
 ): PublicInvoiceDTO {
   return {
     id: invoice.id,
@@ -64,6 +71,8 @@ export function toPublicInvoiceDTO(
     expiresAt: invoice.expiresAt,
     latePayment: opts.latePayment,
     devSimulate: opts.devSimulate,
+    paymentTxIds: opts.paymentTxIds ?? [],
+    explorer: opts.explorer ?? null,
   };
 }
 
@@ -75,6 +84,7 @@ export function toPaymentDTO(payment: Payment): PaymentDTO {
     amountSats: payment.amountSats.toString(),
     status: payment.status,
     latePayment: payment.latePayment,
+    txId: payment.txId,
     observedAt: payment.observedAt,
   };
 }

@@ -4,6 +4,7 @@ import {
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_SSE_HEARTBEAT_MS,
   DEFAULT_WEBHOOK_SWEEP_INTERVAL_MS,
+  type ExplorerLinks,
 } from "@opentill/shared";
 import type { AdapterMode, TachiAdapterConfig } from "@opentill/adapter";
 import { dirname, join } from "node:path";
@@ -45,11 +46,49 @@ export interface GatewayConfig {
    * https://$RAILWAY_PUBLIC_DOMAIN, else null (links stay relative).
    */
   publicUrl: string | null;
+  /**
+   * "View on Tachi" link templates ({hash} / {address}); null in mock mode.
+   * TACHI_EXPLORER_TX_URL / TACHI_EXPLORER_ADDRESS_URL, else the daemon's own
+   * public JSON endpoints — explorer-regtest.tachibtc.com is a Bitcoin L1
+   * explorer and shows no ledger data.
+   */
+  explorer: ExplorerLinks | null;
+  /** Public URL of the mock demo instance, linked from the live Payouts page. */
+  demoUrl: string | null;
   /** Real-settlement settings; null unless ADAPTER_MODE=tachi. */
   tachi: Omit<TachiAdapterConfig, "log"> | null;
 }
 
 export const DEFAULT_TACHI_RPC_URL = "https://rpc-regtest.tachibtc.com";
+
+function httpUrlFromEnv(env: NodeJS.ProcessEnv, key: string, mustContain?: string): string | null {
+  const raw = env[key]?.trim();
+  if (!raw) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.replaceAll("{", "%7B").replaceAll("}", "%7D"));
+  } catch {
+    throw new Error(`${key} must be an absolute http(s) URL, got ${JSON.stringify(raw)}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${key} must be an http(s) URL, got ${JSON.stringify(raw)}`);
+  }
+  if (mustContain && !raw.includes(mustContain)) {
+    throw new Error(`${key} must contain the placeholder ${mustContain}, got ${JSON.stringify(raw)}`);
+  }
+  return raw.replace(/\/+$/, "");
+}
+
+export function resolveExplorer(env: NodeJS.ProcessEnv, rpcUrl: string | null): ExplorerLinks | null {
+  if (rpcUrl === null) return null;
+  const base = rpcUrl.replace(/\/+$/, "");
+  return {
+    txUrl: httpUrlFromEnv(env, "TACHI_EXPLORER_TX_URL", "{hash}") ?? `${base}/tachi_tx?hash={hash}`,
+    addressUrl:
+      httpUrlFromEnv(env, "TACHI_EXPLORER_ADDRESS_URL", "{address}") ??
+      `${base}/tachi_addressVtxos?address={address}&include_spent=true`,
+  };
+}
 
 function intFromEnv(env: NodeJS.ProcessEnv, key: string, fallback: number): number {
   const raw = env[key];
@@ -156,6 +195,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     webDistPath: env.OPENTILL_WEB_DIST ?? DEFAULT_WEB_DIST,
     merchantName: env.OPENTILL_MERCHANT_NAME?.trim() || "OpenTill",
     publicUrl: resolvePublicUrl(env),
+    explorer: resolveExplorer(env, tachi?.rpcUrl ?? null),
+    demoUrl: httpUrlFromEnv(env, "OPENTILL_DEMO_URL"),
     tachi,
   };
 }

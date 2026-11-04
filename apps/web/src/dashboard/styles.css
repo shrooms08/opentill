@@ -1441,3 +1441,32 @@
     animation: none;
   }
 }
+
+/* ---- "View till on Tachi" on the balance hero ----------------------------------- */
+
+.hero-tachi-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.hero-tachi-link:hover {
+  opacity: 1;
+}
+
+/* ---- live-mode payouts: honest "not yet" card ----------------------------------- */
+
+.payouts-soon .withdraw-hint {
+  line-height: 1.55;
+}
+
+.payouts-soon a {
+  font: 600 13px var(--ot-font-display);
+  color: var(--ot-accent);
+  text-decoration: none;
+}
+
+.payouts-soon a:hover {
+  text-decoration: underline;
+}

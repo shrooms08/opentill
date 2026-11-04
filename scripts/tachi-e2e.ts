@@ -40,7 +40,7 @@ async function main() {
     apiKey: "e2e_key", webhookSecret: "e2e_secret", dbPath: join(dir, "e2e.db"), adapterMode: "tachi",
     port: 0, host: "127.0.0.1", pollIntervalMs: 2_000, expirySweepIntervalMs: 10_000, webhookSweepIntervalMs: 5_000,
     devRoutesEnabled: false, devPublicSimulate: false, sseHeartbeatMs: 15_000, payoutWebhookUrl: null, payoutPollIntervalMs: 2_000,
-    webDistPath: join(dir, "no-dist"), merchantName: "Satoshi Beans (regtest)", publicUrl: null,
+    webDistPath: join(dir, "no-dist"), merchantName: "Satoshi Beans (regtest)", publicUrl: null, explorer: null, demoUrl: null,
     tachi: { rpcUrl: RPC, network: "regtest", mnemonic: smoke.mnemonic, statePath: join(dir, "tachi-adapter.json") },
   };
   const app = await createApp(config, { logger: false });

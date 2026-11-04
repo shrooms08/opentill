@@ -98,7 +98,7 @@ export function applyIncomingPayment(
   if (existing) {
     // The only forward move is seen -> committed. Anything else is a replay.
     if (!(existing.status === "seen" && p.status === "committed")) return;
-    ctx.repo.updatePaymentStatus(p.paymentId, "committed", now);
+    ctx.repo.updatePaymentStatus(p.paymentId, "committed", now, p.txId ?? null);
   } else {
     const late =
       invoice !== null && (p.observedAt > invoice.expiresAt || invoice.status === "expired");
@@ -112,6 +112,7 @@ export function applyIncomingPayment(
         status: p.status,
         latePayment: late,
         observedAt: p.observedAt,
+        txId: p.txId ?? null,
       },
       now,
     );

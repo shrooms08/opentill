@@ -1,4 +1,5 @@
 import type {
+  ExplorerLinks,
   InvoiceDTO,
   InvoiceStatus,
   PaymentDTO,
@@ -76,12 +77,16 @@ export interface InvoiceWithPayments extends InvoiceDTO {
 export interface Balance {
   offchainSats: string;
   onchainSats: string;
+  /** Merchant float address on the settlement layer (real mode only). */
+  tillAddress?: string | null;
 }
 
 export interface Health {
   ok: boolean;
   adapterMode: string;
   dbOk: boolean;
+  explorer?: ExplorerLinks | null;
+  demoUrl?: string | null;
 }
 
 export const api = {

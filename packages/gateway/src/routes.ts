@@ -10,7 +10,7 @@ import {
   refundSchema,
   simulatePaymentSchema,
 } from "@opentill/shared";
-import { MockTachiAdapter } from "@opentill/adapter";
+import { MockTachiAdapter, PayoutUnsupportedError } from "@opentill/adapter";
 import type { GatewayConfig } from "./config";
 import { isDbHealthy } from "./db";
 import { InvalidTransitionError } from "./domain/state-machine";
@@ -75,6 +75,9 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     ok: true,
     adapterMode: config.adapterMode,
     dbOk: isDbHealthy(ctx.repo.db),
+    // Public, non-secret UI config: link templates and the demo instance.
+    explorer: config.explorer,
+    demoUrl: config.demoUrl,
   }));
 
   // ---- merchant API (bearer auth) -------------------------------------------
@@ -210,11 +213,20 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
         });
       }
 
-      const snapshot = await ctx.adapter.initiatePayout({
-        kind: body.kind,
-        toAddress: body.toAddress,
-        ...(body.amountSats !== undefined ? { amountSats: BigInt(body.amountSats) } : {}),
-      });
+      let snapshot;
+      try {
+        snapshot = await ctx.adapter.initiatePayout({
+          kind: body.kind,
+          toAddress: body.toAddress,
+          ...(body.amountSats !== undefined ? { amountSats: BigInt(body.amountSats) } : {}),
+        });
+      } catch (err) {
+        // The settlement layer has no L1 exit yet: nothing was attempted or recorded.
+        if (err instanceof PayoutUnsupportedError) {
+          return reply.code(501).send({ error: "payout_unsupported", message: err.message });
+        }
+        throw err;
+      }
 
       const payout = ctx.repo.db.transaction(() => applyAdapterPayout(ctx, snapshot))();
       deps.flushWebhooks();
@@ -257,6 +269,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       return reply.send({
         offchainSats: balance.offchainSats.toString(),
         onchainSats: balance.onchainSats.toString(),
+        tillAddress: ctx.adapter.getTillAddress?.() ?? null,
       });
     });
   });

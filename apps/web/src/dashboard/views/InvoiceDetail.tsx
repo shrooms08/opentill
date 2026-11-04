@@ -4,6 +4,8 @@ import { formatSats } from "../../shared/format";
 import { api, ApiError, type InvoiceWithPayments } from "../api";
 import { EmptyState, fmtDate, IdChip, StatusPill } from "../components";
 import { usePolling } from "../usePolling";
+import { useSettlement } from "../settlement";
+import { TachiLink } from "../../shared/explorer";
 
 export interface RefundResultUi {
   ok: boolean;
@@ -83,6 +85,7 @@ export function InvoiceDetailView({
   onRefund: (toAddress: string) => Promise<RefundResultUi>;
   onRetry: (deliveryId: string) => void | Promise<void>;
 }) {
+  const { explorer } = useSettlement();
   return (
     <>
       <div className="panel-backdrop" onClick={onClose} />
@@ -165,11 +168,13 @@ export function InvoiceDetailView({
                 <div>
                   <div className="ps-label">Address</div>
                   <div className="ps-mono">{invoice.address}</div>
+                  <TachiLink explorer={explorer} address={invoice.address} />
                 </div>
                 {invoice.refundTxId && (
                   <div>
                     <div className="ps-label">Refund tx</div>
                     <div className="ps-mono">{invoice.refundTxId}</div>
+                    <TachiLink explorer={explorer} txId={invoice.refundTxId} />
                   </div>
                 )}
                 {invoice.refundError && (
@@ -186,16 +191,17 @@ export function InvoiceDetailView({
               <EmptyState onDark>No payments observed yet.</EmptyState>
             ) : (
               <div className="sub-table">
-                <div className="sub-head" style={{ gridTemplateColumns: "130px 1fr 120px" }}>
+                <div className="sub-head" style={{ gridTemplateColumns: payGrid(explorer) }}>
                   <span>Id</span>
                   <span className="num">Amount</span>
                   <span>Status</span>
+                  {explorer && <span>Tx</span>}
                 </div>
                 {invoice.payments.map((p) => (
                   <div
                     key={p.paymentId}
                     className="sub-row"
-                    style={{ gridTemplateColumns: "130px 1fr 120px" }}
+                    style={{ gridTemplateColumns: payGrid(explorer) }}
                   >
                     <span className="dim" title={p.paymentId}>
                       {p.paymentId.slice(0, 14)}…
@@ -207,6 +213,16 @@ export function InvoiceDetailView({
                       </span>
                       {p.latePayment && <span className="late-chip">late</span>}
                     </span>
+                    {explorer && (
+                      <span>
+                        <TachiLink
+                          explorer={explorer}
+                          txId={p.txId}
+                          address={p.address}
+                          label={p.txId ? "View tx ↗" : "View address ↗"}
+                        />
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -265,6 +281,9 @@ export function InvoiceDetailView({
     </>
   );
 }
+
+const payGrid = (explorer: unknown): string =>
+  explorer ? "130px 1fr 110px 110px" : "130px 1fr 120px";
 
 export function refundDisabledReason(status: InvoiceWithPayments["status"]): string | null {
   switch (status) {

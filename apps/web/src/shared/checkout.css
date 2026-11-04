@@ -566,3 +566,13 @@
     animation: none;
   }
 }
+
+/* ---- proof-of-payment links (real settlement only) ------------------------------ */
+
+.ck-proof {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+}

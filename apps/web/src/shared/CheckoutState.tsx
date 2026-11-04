@@ -3,6 +3,7 @@ import { Countdown, useNow } from "./Countdown";
 import { formatBtc, formatSats, formatTimestamp, truncateId } from "./format";
 import { LogoMark } from "./Logo";
 import { Qr } from "./Qr";
+import { TachiLink } from "./explorer";
 import type { PublicInvoice } from "./types";
 
 export type ViewState =
@@ -178,6 +179,31 @@ function ReturnToStore({ url }: { url: string | null }) {
   );
 }
 
+/**
+ * Proof-of-payment links on the settlement layer: one per known payment tx,
+ * else the invoice address (its VTXOs). Nothing in mock mode.
+ */
+function PaymentProof({ invoice }: { invoice: PublicInvoice }) {
+  if (!invoice.explorer) return null;
+  const txIds = invoice.paymentTxIds ?? [];
+  return (
+    <div className="ck-proof">
+      {txIds.length > 0 ? (
+        txIds.map((txId, i) => (
+          <TachiLink
+            key={txId}
+            explorer={invoice.explorer}
+            txId={txId}
+            label={txIds.length > 1 ? `Payment ${i + 1} on Tachi ↗` : "View on Tachi ↗"}
+          />
+        ))
+      ) : (
+        <TachiLink explorer={invoice.explorer} address={invoice.address} />
+      )}
+    </div>
+  );
+}
+
 function renderView(view: ViewState, inv: PublicInvoice) {
   const paid = BigInt(inv.amountPaidSats);
   const total = BigInt(inv.amountSats);
@@ -237,6 +263,7 @@ function renderView(view: ViewState, inv: PublicInvoice) {
             <div className="ot-spinner" />
             <div className="ck-finalizing-label">Finalizing</div>
           </div>
+          <PaymentProof invoice={inv} />
           <Foot invoice={inv} />
         </>
       );
@@ -263,6 +290,7 @@ function renderView(view: ViewState, inv: PublicInvoice) {
               <span className="value">{formatTimestamp(inv.createdAt)}</span>
             </div>
           </div>
+          <PaymentProof invoice={inv} />
           <ReturnToStore url={inv.returnUrl} />
           <Foot invoice={inv} right />
         </>

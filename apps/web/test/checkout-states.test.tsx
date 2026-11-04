@@ -29,6 +29,8 @@ const base: PublicInvoice = {
   latePayment: false,
   devSimulate: false,
   returnUrl: null,
+  paymentTxIds: [],
+  explorer: null,
 };
 
 afterEach(cleanup);

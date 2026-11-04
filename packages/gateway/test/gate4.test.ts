@@ -62,7 +62,7 @@ async function getPayout(id: string): Promise<PayoutDTO> {
 describe("cooperative payout lifecycle", () => {
   it("initiated -> broadcasting -> settled, debiting then crediting on-chain", async () => {
     await fundViaInvoice("100000");
-    expect(await getBalance()).toEqual({ offchainSats: "100000", onchainSats: "0" });
+    expect(await getBalance()).toEqual({ offchainSats: "100000", onchainSats: "0", tillAddress: null });
 
     const created = await postPayout({
       kind: "cooperative",
@@ -85,7 +85,7 @@ describe("cooperative payout lifecycle", () => {
     const settled = await getPayout(payout.id);
     expect(settled.status).toBe("settled");
     expect(settled.settledAt).toBeTypeOf("number");
-    expect(await getBalance()).toEqual({ offchainSats: "70000", onchainSats: "30000" });
+    expect(await getBalance()).toEqual({ offchainSats: "70000", onchainSats: "30000", tillAddress: null });
 
     const list = await h.app.inject({ method: "GET", url: "/api/payouts", headers: authHeaders() });
     expect(list.json<{ total: number; payouts: PayoutDTO[] }>().total).toBe(1);
@@ -126,7 +126,7 @@ describe("unilateral exit", () => {
   it("runs the timelock, blocks refunds and other payouts with 409s, then settles", async () => {
     const invoiceId = await fundViaInvoice("50000");
     await fundViaInvoice("30000");
-    expect(await getBalance()).toEqual({ offchainSats: "80000", onchainSats: "0" });
+    expect(await getBalance()).toEqual({ offchainSats: "80000", onchainSats: "0", tillAddress: null });
 
     const created = await postPayout({ kind: "exit", toAddress: "bc1qsovereign" });
     expect(created.statusCode).toBe(201);
@@ -175,7 +175,7 @@ describe("unilateral exit", () => {
     const settled = await getPayout(exit.id);
     expect(settled.status).toBe("settled");
     expect(settled.timelockBlocksRemaining).toBeNull();
-    expect(await getBalance()).toEqual({ offchainSats: "0", onchainSats: "80000" });
+    expect(await getBalance()).toEqual({ offchainSats: "0", onchainSats: "80000", tillAddress: null });
 
     // Spending unlocks again: a new cooperative payout is accepted (until it
     // hits the now-empty balance, which is a clean adapter-side failure).

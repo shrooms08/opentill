@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   InsufficientFundsError,
+  PayoutUnsupportedError,
   TachiBroadcastError,
   TachiRealAdapter,
   vtxoIdFor,
@@ -232,16 +233,66 @@ describe("TachiRealAdapter — balances + payouts", () => {
     expect(await a.getBalance()).toEqual({ offchainSats: 44_999n, onchainSats: 100_000n });
   });
 
-  it("reports payouts as failed/not-implemented instead of faking them", async () => {
+  it("refuses payouts with PayoutUnsupportedError instead of faking them", async () => {
     const fake = makeFake();
     const a = adapter(fake);
     await a.init();
-    const coop = await a.initiatePayout({ kind: "cooperative", toAddress: "bc1q", amountSats: 1n });
-    const exit = await a.initiatePayout({ kind: "exit", toAddress: "bc1q" });
-    expect(coop.status).toBe("failed");
-    expect(exit.status).toBe("failed");
-    expect(coop.error).toMatch(/not implemented in real \(tachi\) mode/);
-    expect(exit.error).toMatch(/vault/);
+    await expect(a.initiatePayout({ kind: "cooperative", toAddress: "bc1q", amountSats: 1n })).rejects.toBeInstanceOf(PayoutUnsupportedError);
+    await expect(a.initiatePayout({ kind: "exit", toAddress: "bc1q" })).rejects.toThrow(/VTXO exit, which the protocol does not expose yet/);
+    await expect(a.initiatePayout({ kind: "exit", toAddress: "bc1q" })).rejects.not.toThrow(/SDK builder/);
     expect(await a.pollPayouts()).toEqual([]);
+  });
+
+  it("exposes the till address", async () => {
+    const fake = makeFake();
+    const a = adapter(fake);
+    expect(a.getTillAddress()).toBeNull();
+    await a.init();
+    expect(a.getTillAddress()).toBe(a.keys()[0]!.address);
+  });
+});
+
+describe("TachiRealAdapter — payment txids", () => {
+  it("carries the mempool tx hash on seen payments and recovers it from the block for committed ones", async () => {
+    const fake = makeFake({ height: 500 });
+    const blocks = new Map<number, unknown>();
+    (fake.client as any).getBlockByHeight = async (h: number) => blocks.get(h) ?? { transactions: null };
+    const a = adapter(fake);
+    await a.init();
+    const { address } = await a.createReceiveAddress("inv");
+    await a.watchAddress(address);
+    const key = a.keys().find((k) => k.address === address)!;
+
+    fake.state.mempool.set(address, [{ tx_hash: TX_HASH.toUpperCase(), vout: [{ owner: key.xOnlyHex, amount: 2_000, script: "" }] }]);
+    const seen = await a.pollIncoming(null);
+    expect(seen.payments).toEqual([expect.objectContaining({ status: "seen", txId: TX_HASH, paymentId: vtxoIdFor(TX_HASH, 0) })]);
+
+    fake.state.mempool.clear();
+    const other = "ab".repeat(32);
+    blocks.set(450, { transactions: [
+      { tx_hash: other, vout: [{ owner: "00", amount: 1 }] },
+      { tx_hash: TX_HASH.toUpperCase(), vout: [{ owner: key.xOnlyHex, amount: 2_000 }] },
+    ] });
+    fake.state.vtxos.set(address, [
+      { id: vtxoIdFor(TX_HASH, 0), owner: key.xOnlyHex, amount: 2_000, spent: false, height: 450, script: "", locked: false },
+      { id: "cd".repeat(32), owner: key.xOnlyHex, amount: 5, spent: false, height: 451, script: "", locked: false },
+    ]);
+    const committed = await a.pollIncoming(null);
+    expect(committed.payments[0]).toMatchObject({ status: "committed", txId: TX_HASH });
+    // No matching block entry: still reported, just without a txid.
+    expect(committed.payments[1]).toMatchObject({ status: "committed" });
+    expect(committed.payments[1]!.txId).toBeUndefined();
+  });
+
+  it("treats a failing block lookup as no txid, not an error", async () => {
+    const fake = makeFake({ height: 500 });
+    const a = adapter(fake); // fake has no getBlockByHeight at all
+    await a.init();
+    const { address } = await a.createReceiveAddress("inv");
+    await a.watchAddress(address);
+    fake.state.vtxos.set(address, [{ id: "ef".repeat(32), owner: "", amount: 9, spent: false, height: 10, script: "", locked: false }]);
+    const r = await a.pollIncoming(null);
+    expect(r.payments).toHaveLength(1);
+    expect(r.payments[0]!.txId).toBeUndefined();
   });
 });

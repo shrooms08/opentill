@@ -335,3 +335,16 @@ body {
   border-width: 2.5px;
   border-top-color: var(--ot-accent);
 }
+
+/* ---- "View on Tachi ↗" outbound links ------------------------------------------ */
+
+.tachi-link {
+  font: 500 12px var(--ot-font-mono);
+  color: var(--ot-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tachi-link:hover {
+  text-decoration: underline;
+}

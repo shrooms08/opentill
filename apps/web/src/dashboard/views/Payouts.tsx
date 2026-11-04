@@ -5,6 +5,7 @@ import { api, findPendingExit, type Balance } from "../api";
 import { EmptyState, fmtDate, StatusPill } from "../components";
 import { usePolling } from "../usePolling";
 import { BalanceHeroes } from "./Overview";
+import { useSettlement } from "../settlement";
 
 export interface WithdrawResultUi {
   ok: boolean;
@@ -63,6 +64,7 @@ export function PayoutsView({
   }) => Promise<WithdrawResultUi>;
 }) {
   const pendingExit = findPendingExit(payouts ?? []);
+  const { adapterMode, demoUrl } = useSettlement();
 
   return (
     <div className="view">
@@ -74,7 +76,11 @@ export function PayoutsView({
 
       <BalanceHeroes balance={balance} pendingExit={pendingExit} />
 
-      <WithdrawForm balance={balance} pendingExit={pendingExit} onWithdraw={onWithdraw} />
+      {adapterMode === "tachi" ? (
+        <PayoutsComingSoon demoUrl={demoUrl} />
+      ) : (
+        <WithdrawForm balance={balance} pendingExit={pendingExit} onWithdraw={onWithdraw} />
+      )}
 
       <section className="sheet">
         <div className="sheet-head">
@@ -83,6 +89,28 @@ export function PayoutsView({
         <PayoutTable payouts={payouts} />
       </section>
     </div>
+  );
+}
+
+/**
+ * Real (tachi) mode: there is no L1 exit for received sats yet, so no buttons
+ * that could only fail. The API answers 501 with the same reason.
+ */
+export function PayoutsComingSoon({ demoUrl }: { demoUrl: string | null }) {
+  return (
+    <section className="withdraw-card payouts-soon" aria-label="On-chain payouts">
+      <h2 className="withdraw-title">On-chain payouts: coming with Tachi exit support</h2>
+      <p className="withdraw-hint">
+        Received sats stay self-custodial on Tachi. Moving them back to on-chain Bitcoin needs
+        Tachi's VTXO exit, which the protocol does not expose yet. OpenTill's payout flow is live
+        in demo mode and switches on here when exit ships.
+      </p>
+      {demoUrl && (
+        <a href={`${demoUrl}/dashboard#/payouts`} target="_blank" rel="noopener noreferrer">
+          See the payout flow on the demo instance ↗
+        </a>
+      )}
+    </section>
   );
 }
 

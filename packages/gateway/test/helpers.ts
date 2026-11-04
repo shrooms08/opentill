@@ -46,6 +46,8 @@ export async function makeHarness(opts: HarnessOptions = {}): Promise<Harness> {
     payoutPollIntervalMs: 50,
     merchantName: "OpenTill",
     publicUrl: null,
+    explorer: null,
+    demoUrl: null,
     tachi: null,
     ...opts.configOverrides,
   };

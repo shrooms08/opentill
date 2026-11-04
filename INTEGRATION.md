@@ -74,7 +74,7 @@ invoice. That is why OpenTill does *not* create a Taurus vault per invoice.
 | `pollIncoming(cursor)` | per watched address: `getMempoolByAddress` → **seen** (paymentId = `computeVtxoId(tx_hash, vout)`), `getAddressVtxos(addr, includeSpent)` → **committed** for VTXOs above the height cursor. Cursor = daemon height at tick start − 1, so a block landing mid-tick is never skipped; the gateway is idempotent on `(paymentId, status)` | e2e: invoice `pending → confirmed` via real ticks (the block landed before the first tick, so the gateway saw the payment straight as `committed`; the `seen` mapping is unit-tested and the underlying `pending`→`committed` alert pair was observed live via `watch` in the smoke) |
 | `send` (refund) | pick one key covering `amount + fee` (one TachiTx = one signer), largest-first inputs, change back, `getAccountNonce`, sign, `broadcastTxSync` → assert `code === 0` → `waitForTachiTxCommit` → assert committed; returns the tx hash | e2e refund `698e3128…bf71` |
 | `getBalance` | off-chain = Σ `getBalance(key)`; on-chain = `scantxoutset` over our `addr()` descriptors through the daemon's Bitcoin RPC proxy (cached) | e2e: 39 998 off-chain / 200 000 on-chain |
-| `initiatePayout` | **not implemented** — returns a `failed` payout with the reason: no SDK builder for `TxLockForVault` yet (§5.4) | unit test |
+| `initiatePayout` | **not implemented** — throws `PayoutUnsupportedError`; the API answers **501** `payout_unsupported`: moving receipts to L1 needs Tachi's VTXO exit, which the protocol does not expose yet (§5.4). The dashboard shows a "coming with Tachi exit support" card instead of payout buttons. | unit + route test |
 | `pollPayouts` | `[]` | — |
 
 Polling is the correctness path (crash-safe by construction). `watch()` was

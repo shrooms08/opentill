@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SettlementContext, type SettlementInfo } from "./settlement";
 import { LogoLockup } from "../shared/Logo";
 import { api, ApiError, clearKey, getStoredKey, storeKey, UNAUTHORIZED_EVENT } from "./api";
 import { useHashRoute } from "./router";
@@ -119,14 +120,25 @@ const VIEW_TITLES: Record<string, string> = {
 
 function Shell({ onLock }: { onLock: () => void }) {
   const route = useHashRoute();
-  const [adapterMode, setAdapterMode] = useState<string | null>(null);
+  const [settlement, setSettlement] = useState<SettlementInfo>({
+    adapterMode: null,
+    explorer: null,
+    demoUrl: null,
+  });
+  const adapterMode = settlement.adapterMode;
 
   useEffect(() => {
     let live = true;
     api
       .health()
       .then((h) => {
-        if (live) setAdapterMode(h.adapterMode);
+        if (live) {
+          setSettlement({
+            adapterMode: h.adapterMode,
+            explorer: h.explorer ?? null,
+            demoUrl: h.demoUrl ?? null,
+          });
+        }
       })
       .catch(() => {
         /* health probe is best-effort; no banner if unreachable */
@@ -165,6 +177,7 @@ function Shell({ onLock }: { onLock: () => void }) {
   );
 
   return (
+    <SettlementContext.Provider value={settlement}>
     <div className="dash">
       <aside className="dash-side">
         <Wordmark className="wordmark" size={20} />
@@ -184,5 +197,6 @@ function Shell({ onLock }: { onLock: () => void }) {
       <main className="dash-main">{view}</main>
       <MockModeBanner adapterMode={adapterMode} />
     </div>
+    </SettlementContext.Provider>
   );
 }

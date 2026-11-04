@@ -43,6 +43,8 @@ export interface Payment {
   amountSats: bigint;
   status: PaymentStatus;
   latePayment: boolean;
+  /** Settlement-layer tx that created the output, when known. */
+  txId: string | null;
   observedAt: number;
   createdAt: number;
   updatedAt: number;
@@ -79,7 +81,17 @@ export interface PaymentDTO {
   amountSats: string;
   status: PaymentStatus;
   latePayment: boolean;
+  txId: string | null;
   observedAt: number;
+}
+
+/**
+ * Public links to the settlement layer's view of a tx / address. Templates
+ * contain `{hash}` / `{address}`. Null in mock mode (nothing real to show).
+ */
+export interface ExplorerLinks {
+  txUrl: string;
+  addressUrl: string;
 }
 
 /**
@@ -105,6 +117,10 @@ export interface PublicInvoiceDTO {
   latePayment: boolean;
   /** True only when the gateway exposes the public dev-simulate route. */
   devSimulate: boolean;
+  /** Settlement txids of the payments credited to this invoice (public ledger data). */
+  paymentTxIds: string[];
+  /** Explorer link templates; null in mock mode. */
+  explorer: ExplorerLinks | null;
 }
 
 // ---- payouts (money out) ----------------------------------------------------

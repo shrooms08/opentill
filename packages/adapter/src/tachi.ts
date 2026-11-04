@@ -12,11 +12,10 @@
  *    L1 UTXOs at our taproot addresses via the daemon's Bitcoin RPC proxy.
  *
  * What is NOT implemented in real mode (honest boundary, see INTEGRATION.md):
- *  - payouts to L1. The route is: lock a receipt VTXO into a vault with
- *    `TxLockForVault`, then take that vault's cooperative refund (normal case)
- *    or unilateral exit (backstop) — both exits are proven on regtest, see
- *    INTEGRATION.md 5.1. The SDK ships no builder for the lock step, so
- *    initiatePayout returns a `failed` payout that says so.
+ *  - payouts to L1. Moving received ledger VTXOs back to on-chain Bitcoin
+ *    needs Tachi's VTXO exit, which the protocol does not expose yet
+ *    (INTEGRATION.md 5.4), so initiatePayout throws PayoutUnsupportedError and
+ *    the API answers 501.
  *
  *    Not `TxWithdraw`: Tachi confirmed at source level that the type is
  *    unimplemented beyond generic format checks, so a payout built on it would
@@ -28,6 +27,7 @@ import { assertBroadcastOk, makeClient, TachiBroadcastError } from "./tachi/clie
 import { MerchantKeyring, type DerivedKey } from "./tachi/keys";
 import { StateStore } from "./tachi/state";
 import { buildSignedTransferHex, vtxoIdFor } from "./tachi/tx";
+import { PayoutUnsupportedError } from "./types";
 import {
   InsufficientFundsError,
   NotImplementedError,
@@ -187,6 +187,8 @@ export class TachiRealAdapter implements TachiAdapter {
     const h0 = Number((status as any)?.result?.sync_info?.latest_block_height ?? NaN);
     const now = this.#now();
     const payments: IncomingPayment[] = [];
+    // One block fetch per height per tick, shared across addresses.
+    const blocks = new Map<number, Promise<Array<{ tx_hash: string; vout: unknown[] }>>>();
 
     for (const address of state.state.watched) {
       const key = state.findByAddress(address);
@@ -202,6 +204,7 @@ export class TachiRealAdapter implements TachiAdapter {
             amountSats: BigInt(out.amount),
             observedAt: now,
             status: "seen",
+            txId: tx.tx_hash.toLowerCase(),
           });
         });
       }
@@ -209,18 +212,51 @@ export class TachiRealAdapter implements TachiAdapter {
       const committed = await this.#client.getAddressVtxos(address, true);
       for (const v of committed.vtxos) {
         if (v.height <= from) continue;
+        const txId = await this.#originTxId(v.id, v.height, blocks);
         payments.push({
           paymentId: v.id,
           toAddress: address,
           amountSats: BigInt(v.amount),
           observedAt: now,
           status: "committed",
+          ...(txId ? { txId } : {}),
         });
       }
     }
 
     const nextCursor = Number.isFinite(h0) ? Math.max(from, h0 - 1) : from;
     return { payments, nextCursor: String(nextCursor) };
+  }
+
+  /**
+   * Committed VTXOs don't name the tx that created them, but the block at the
+   * VTXO's height lists its transactions: match vtxoIdFor(tx, vout) === id.
+   * Best-effort — any failure just means no txid (the UI links the address).
+   * Runs once per new VTXO, since the cursor moves past its height.
+   */
+  async #originTxId(
+    vtxoId: string,
+    height: number,
+    blocks: Map<number, Promise<Array<{ tx_hash: string; vout: unknown[] }>>>,
+  ): Promise<string | undefined> {
+    try {
+      let txs = blocks.get(height);
+      if (!txs) {
+        txs = this.#client
+          .getBlockByHeight(height)
+          .then((b) => ((b as any)?.transactions ?? []) as Array<{ tx_hash: string; vout: unknown[] }>);
+        blocks.set(height, txs);
+      }
+      const want = vtxoId.toLowerCase();
+      for (const tx of await txs) {
+        for (let i = 0; i < (tx.vout?.length ?? 0); i++) {
+          if (vtxoIdFor(tx.tx_hash, i) === want) return tx.tx_hash.toLowerCase();
+        }
+      }
+    } catch {
+      /* lookup is optional */
+    }
+    return undefined;
   }
 
   // ---- sending (refunds) ---------------------------------------------------
@@ -319,24 +355,19 @@ export class TachiRealAdapter implements TachiAdapter {
 
   // ---- payouts (not implemented in real mode) --------------------------------
 
-  async initiatePayout(params: { kind: PayoutKind; toAddress: string; amountSats?: bigint }): Promise<AdapterPayout> {
-    // Both payout kinds fail for the same reason: they exit a vault, and this
-    // deployment holds plain ledger VTXOs that cannot yet be locked into one.
-    const why =
-      "both payout kinds exit a Taurus vault, and this deployment holds plain ledger VTXOs; " +
-      "locking them into a vault (TxLockForVault) has no SDK builder yet";
-    return {
-      payoutId: `unimpl_${this.#now().toString(36)}`,
-      kind: params.kind,
-      toAddress: params.toAddress,
-      amountSats: params.amountSats ?? 0n,
-      status: "failed",
-      error: `not implemented in real (tachi) mode: ${why} — see INTEGRATION.md`,
-    };
+  async initiatePayout(_params: { kind: PayoutKind; toAddress: string; amountSats?: bigint }): Promise<AdapterPayout> {
+    // Both payout kinds need Tachi's VTXO exit (receipt → L1), which the
+    // protocol does not expose yet — INTEGRATION.md 5.4. Fail loudly, record nothing.
+    throw new PayoutUnsupportedError();
   }
 
   async pollPayouts(): Promise<AdapterPayout[]> {
     return [];
+  }
+
+  /** The till (merchant float) address: receive chain, index 0. */
+  getTillAddress(): string | null {
+    return this.#keyring ? this.#keyring.derive(0, false).address : null;
   }
 
   /** Exposed for scripts/tests: the adapter's keys (public material only). */

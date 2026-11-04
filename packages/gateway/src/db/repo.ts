@@ -41,6 +41,7 @@ interface PaymentRow {
   observed_at: number;
   created_at: number;
   updated_at: number;
+  tx_id: string | null;
 }
 
 interface PayoutRow {
@@ -139,6 +140,7 @@ export function rowToPayment(row: PaymentRow): Payment {
     amountSats: BigInt(row.amount_sats),
     status: row.status as PaymentStatus,
     latePayment: row.late_payment === 1,
+    txId: row.tx_id ?? null,
     observedAt: row.observed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -418,14 +420,15 @@ export class Repo {
       status: PaymentStatus;
       latePayment: boolean;
       observedAt: number;
+      txId?: string | null;
     },
     now: number = Date.now(),
   ): void {
     this.db
       .prepare(
         `INSERT INTO payments
-          (id, payment_id, invoice_id, address, amount_sats, status, late_payment, observed_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, payment_id, invoice_id, address, amount_sats, status, late_payment, observed_at, created_at, updated_at, tx_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         `pay_${randomUUID().replace(/-/g, "")}`,
@@ -438,13 +441,31 @@ export class Repo {
         input.observedAt,
         now,
         now,
+        input.txId ?? null,
       );
   }
 
-  updatePaymentStatus(paymentId: string, status: PaymentStatus, now: number = Date.now()): void {
+  /** A known txid is never overwritten; a missing one is filled in when learned. */
+  updatePaymentStatus(
+    paymentId: string,
+    status: PaymentStatus,
+    now: number = Date.now(),
+    txId: string | null = null,
+  ): void {
     this.db
-      .prepare("UPDATE payments SET status = ?, updated_at = ? WHERE payment_id = ?")
-      .run(status, now, paymentId);
+      .prepare("UPDATE payments SET status = ?, updated_at = ?, tx_id = COALESCE(tx_id, ?) WHERE payment_id = ?")
+      .run(status, now, txId, paymentId);
+  }
+
+  /** Distinct known txids of the payments credited to an invoice, oldest first. */
+  listPaymentTxIds(invoiceId: string): string[] {
+    return this.db
+      .prepare<[string], { tx_id: string }>(
+        `SELECT tx_id FROM payments WHERE invoice_id = ? AND tx_id IS NOT NULL
+         GROUP BY tx_id ORDER BY MIN(observed_at) ASC`,
+      )
+      .all(invoiceId)
+      .map((r) => r.tx_id);
   }
 
   // ---- payouts --------------------------------------------------------------

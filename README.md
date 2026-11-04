@@ -439,6 +439,9 @@ Any non-2xx or transport error is retried by an interval sweep with backoff **5s
 | `WEBHOOK_SWEEP_INTERVAL_MS` | no | `5000` | Webhook retry sweep interval. |
 | `SSE_HEARTBEAT_MS` | no | `15000` | Interval between SSE heartbeat events. |
 | `OPENTILL_PAYOUT_WEBHOOK_URL` | no | — | Merchant-level webhook for payout status changes. Unset = no payout webhooks. |
+| `TACHI_EXPLORER_TX_URL` | no | `${TACHI_RPC_URL}/tachi_tx?hash={hash}` | "View on Tachi" link for a ledger tx (tachi mode only). Must contain `{hash}`. The default is the daemon's JSON view: the regtest block explorer is Bitcoin-L1 only. |
+| `TACHI_EXPLORER_ADDRESS_URL` | no | `${TACHI_RPC_URL}/tachi_addressVtxos?address={address}&include_spent=true` | "View on Tachi" link for an address (till, invoice). Must contain `{address}`. |
+| `OPENTILL_DEMO_URL` | no | — | Public URL of a mock demo instance; the live Payouts page links its payout flow. |
 | `OPENTILL_PORT` | no | `8080` | docker-compose only: host port mapped to the container's 8080. |
 | `PAYOUT_POLL_INTERVAL_MS` | no | `2000` | Payout status sweep interval. |
 | `OPENTILL_WEB_DIST` | no | `apps/web/dist` | Where the gateway looks for the built checkout bundle. |

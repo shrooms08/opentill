@@ -5,6 +5,8 @@ import { api, findPendingExit, type Balance } from "../api";
 import { InvoiceTable, StatCard } from "../components";
 import { navigate } from "../router";
 import { usePolling } from "../usePolling";
+import { useSettlement } from "../settlement";
+import { TachiLink } from "../../shared/explorer";
 
 export function Overview() {
   const [stats, setStats] = useState<StatsDTO | null>(null);
@@ -69,6 +71,7 @@ export function BalanceHeroes({
   pendingExit?: PayoutDTO | null;
   onWithdraw?: () => void;
 }) {
+  const { explorer } = useSettlement();
   const offchain = balance?.offchainSats ?? "0";
   const hasFunds = offchain !== "0" || Boolean(pendingExit);
 
@@ -89,6 +92,12 @@ export function BalanceHeroes({
             there's money in it.
           </div>
         )}
+        <TachiLink
+          explorer={explorer}
+          address={balance?.tillAddress ?? null}
+          label="View till on Tachi ↗"
+          className="tachi-link hero-tachi-link"
+        />
         {pendingExit ? (
           <div className="hero-foot">
             exiting · {pendingExit.timelockBlocksRemaining ?? "…"} blocks remaining ·{" "}

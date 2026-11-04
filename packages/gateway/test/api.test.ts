@@ -19,7 +19,7 @@ describe("healthz", () => {
   it("needs no auth and reports adapter mode and db health", async () => {
     const res = await h.app.inject({ method: "GET", url: "/healthz" });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, adapterMode: "mock", dbOk: true });
+    expect(res.json()).toEqual({ ok: true, adapterMode: "mock", dbOk: true, explorer: null, demoUrl: null });
   });
 });
 
@@ -189,7 +189,7 @@ describe("GET /api/balance", () => {
 
     const res = await h.app.inject({ method: "GET", url: "/api/balance", headers: authHeaders() });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ offchainSats: "7777", onchainSats: "0" });
+    expect(res.json()).toEqual({ offchainSats: "7777", onchainSats: "0", tillAddress: null });
   });
 });
 
